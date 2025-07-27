@@ -31,7 +31,7 @@
 
 <div align="center">
 
-| 🎯 **Gravação Inteligente** | 🤖 **IA Avançada** | 📊 **Dashboard Moderno** |
+|  **Gravação Inteligente** |  **IA Avançada** |  **Interface Moderna** |
 |:---:|:---:|:---:|
 | ![Recording](https://img.icons8.com/fluency/96/microphone.png) | ![AI](https://img.icons8.com/fluency/96/artificial-intelligence.png) | ![Dashboard](https://img.icons8.com/fluency/96/dashboard.png) |
 | Gravação em tempo real<br/>Controles profissionais<br/>Teste de áudio | Transcrição automática<br/>Análise comportamental<br/>Insights inteligentes | Histórico organizado<br/>Busca avançada<br/>Export para TXT |
@@ -244,7 +244,7 @@ npm run dev
 
 <div align="center">
 
-| 🏢 **Empresarial** | 🎓 **Acadêmico** | 👤 **Pessoal** |
+|  **Empresarial** |  **Acadêmico** |  **Pessoal** |
 |:---:|:---:|:---:|
 | ![Business](https://img.icons8.com/fluency/64/business.png) | ![Education](https://img.icons8.com/color/64/000000/student-center.png) | ![Personal](https://img.icons8.com/color/64/000000/user.png) |
 | Reuniões de equipe<br/>Brainstorming<br/>Negociações | Aulas e palestras<br/>Grupos de estudo<br/>Seminários | Entrevistas<br/>Podcasts<br/>Práticas |
@@ -339,13 +339,6 @@ timeline
 
 ## 🤝 Contribuição
 
-<div align="center">
-
-### 💪 **Junte-se à comunidade Listen Meet!**
-
-<img src="https://contrib-readme.vercel.app/api?username=HigorGabs" alt="Contribution Graph" />
-
-</div>
 
 <details>
 <summary><b>🚀 Como Contribuir</b></summary>
