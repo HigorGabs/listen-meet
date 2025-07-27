@@ -27,9 +27,12 @@
 
 ---
 
-## ✨ Funcionalidades
+## ✨ Preview e Funcionalidades
 
 <div align="center">
+  
+![read](https://github.com/user-attachments/assets/0de1d1f6-0ae8-4081-af93-d66126dc8dab)
+
 
 |  **Gravação Inteligente** |  **IA Avançada** |  **Interface Moderna** |
 |:---:|:---:|:---:|
