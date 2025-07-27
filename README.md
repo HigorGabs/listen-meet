@@ -18,29 +18,10 @@
 </p>
 
 <p align="center">
-  <a href="#-preview">🎬 Preview</a> •
   <a href="#-funcionalidades">✨ Features</a> •
   <a href="#-instalação">⚡ Install</a> •
-  <a href="#-demo">🚀 Demo</a> •
   <a href="#-contribuição">🤝 Contribute</a>
 </p>
-
-</div>
-
----
-
-## 🎬 Preview
-
-<div align="center">
-
-### 🎤 Interface de Gravação
-<img src="https://via.placeholder.com/800x450/4F46E5/FFFFFF?text=🎤+Interface+de+Gravação+em+Tempo+Real" alt="Recording Interface" width="80%" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);" />
-
-### 📊 Dashboard com Análise de IA
-<img src="https://via.placeholder.com/800x450/06B6D4/FFFFFF?text=📊+Dashboard+com+Histórico+e+Análises" alt="AI Dashboard" width="80%" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);" />
-
-### 🤖 Análise Detalhada
-<img src="https://via.placeholder.com/800x450/10B981/FFFFFF?text=🤖+Análise+Completa+com+Gemini+AI" alt="AI Analysis" width="80%" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);" />
 
 </div>
 
