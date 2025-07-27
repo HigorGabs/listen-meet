@@ -1,395 +1,486 @@
-# 🎤 Listen Meet
-
-> **Transforme suas reuniões em insights inteligentes com IA**
-
-Uma aplicação moderna e intuitiva para gravar, transcrever e analisar reuniões usando o poder do Google Gemini AI. Capture áudio em tempo real, obtenha análises detalhadas e mantenha um histórico organizado de todas as suas reuniões.
-
 <div align="center">
 
-[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript)](https://www.typescriptlang.org/)
-[![Tailwind](https://img.shields.io/badge/Tailwind-CSS-38B2AC?logo=tailwind-css)](https://tailwindcss.com/)
-[![Google Gemini](https://img.shields.io/badge/Google-Gemini%20AI-4285F4?logo=google)](https://ai.google.dev/)
+![Listen Meet Banner](https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=0,2,2,30,26&height=300&section=header&text=Listen%20Meet&fontSize=80&fontAlignY=35&fontColor=fff&desc=Transforme%20suas%20reuniões%20em%20insights%20inteligentes%20com%20IA&descAlignY=55&descSize=18)
+
+[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=28&duration=3000&pause=1000&color=4F46E5&center=true&vCenter=true&multiline=true&random=false&width=800&height=100&lines=🎤+Grave+%7C+📝+Transcreva+%7C+🤖+Analise;✨+Google+Gemini+2.5+Flash+%7C+⚡+Next.js+15)](https://git.io/typing-svg)
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js&logoColor=white" />
+  <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" />
+  <img src="https://img.shields.io/badge/Google_Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/stars/HigorGabs/listen-meet?style=social" />
+  <img src="https://img.shields.io/github/forks/HigorGabs/listen-meet?style=social" />
+  <img src="https://img.shields.io/github/watchers/HigorGabs/listen-meet?style=social" />
+</p>
+
+<p align="center">
+  <a href="#-preview">🎬 Preview</a> •
+  <a href="#-funcionalidades">✨ Features</a> •
+  <a href="#-instalação">⚡ Install</a> •
+  <a href="#-demo">🚀 Demo</a> •
+  <a href="#-contribuição">🤝 Contribute</a>
+</p>
 
 </div>
 
-## ✨ Funcionalidades Principais
+---
 
-### 🎯 **Gravação Inteligente de Áudio**
-- **Gravação em tempo real** com controles profissionais (play, pause, stop)
-- **Monitoramento visual** do nível de áudio com barras animadas
-- **Seleção de dispositivos** de entrada (microfones, dispositivos virtuais)
-- **Teste de áudio** antes da gravação para garantir qualidade
-- **Upload de arquivos** existentes (MP3, WAV, WEBM, OGG, M4A)
-- **Múltiplos formatos** de saída suportados
+## 🎬 Preview
+
+<div align="center">
+
+### 🎤 Interface de Gravação
+<img src="https://via.placeholder.com/800x450/4F46E5/FFFFFF?text=🎤+Interface+de+Gravação+em+Tempo+Real" alt="Recording Interface" width="80%" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);" />
+
+### 📊 Dashboard com Análise de IA
+<img src="https://via.placeholder.com/800x450/06B6D4/FFFFFF?text=📊+Dashboard+com+Histórico+e+Análises" alt="AI Dashboard" width="80%" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);" />
+
+### 🤖 Análise Detalhada
+<img src="https://via.placeholder.com/800x450/10B981/FFFFFF?text=🤖+Análise+Completa+com+Gemini+AI" alt="AI Analysis" width="80%" style="border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);" />
+
+</div>
+
+---
+
+## ✨ Funcionalidades
+
+<div align="center">
+
+| 🎯 **Gravação Inteligente** | 🤖 **IA Avançada** | 📊 **Dashboard Moderno** |
+|:---:|:---:|:---:|
+| ![Recording](https://img.icons8.com/fluency/96/000000/microphone.png) | ![AI](https://img.icons8.com/fluency/96/000000/artificial-intelligence.png) | ![Dashboard](https://img.icons8.com/fluency/96/000000/dashboard.png) |
+| Gravação em tempo real<br/>Controles profissionais<br/>Teste de áudio | Transcrição automática<br/>Análise comportamental<br/>Insights inteligentes | Histórico organizado<br/>Busca avançada<br/>Export para TXT |
+
+</div>
+
+### 🎤 **Gravação Profissional**
+```
+🎙️ Monitoramento visual em tempo real
+⚙️ Seleção de dispositivos de entrada  
+⏯️ Controles de pause/play/stop
+🧪 Teste de áudio antes da gravação
+📁 Upload de arquivos (MP3, WAV, WEBM...)
+🎚️ Múltiplos formatos de saída
+```
 
 ### 🤖 **Análise Completa com IA**
-- **Transcrição automática** completa usando Google Gemini 2.5 Flash
-- **Resumo executivo** inteligente com contexto e decisões
-- **Identificação de participantes** automática ou manual
-- **Extração de ações** e próximos passos
-- **Timeline da reunião** com fases e marcos importantes
-- **Métricas de produtividade** (eficiência, engajamento, decisões)
-- **Análise de participação** individual com tempo de fala e contribuições
-- **Categorização automática** (tipo, prioridade, status)
-- **Insights comportamentais** (sentimento, urgência, resultados)
-
-### 📊 **Dashboard e Gestão**
-- **Histórico completo** de todas as reuniões
-- **Interface expandível** com resumo e detalhes avançados
-- **Busca inteligente** por conteúdo, participantes ou tópicos
-- **Filtros por período** (hoje, esta semana, este mês)
-- **Estatísticas consolidadas** (total de reuniões, tempo acumulado)
-- **Export individual** em formato TXT para uso offline
-- **Armazenamento local** seguro (sem necessidade de banco de dados)
-
-### 🎨 **Interface Moderna**
-- **Design responsivo** otimizado para desktop e mobile
-- **Tema escuro/claro** automático baseado no sistema
-- **Componentes elegantes** com Shadcn/UI e Radix primitives
-- **Animações fluidas** e feedback visual intuitivo
-- **Acessibilidade** otimizada com navegação por teclado
-- **Tooltips informativos** e ajuda contextual
-
-## 🏗️ Arquitetura Técnica
-
-```mermaid
-graph TD
-    A[👤 Usuário] --> B[🎤 Interface de Gravação]
-    B --> C[📊 Monitor de Áudio]
-    B --> D[💾 MediaRecorder API]
-    B --> E[📁 Upload de Arquivos]
-    
-    D --> F[🤖 Google Gemini AI]
-    E --> F
-    F --> G[📝 Análise & Transcrição]
-    G --> H[💽 LocalStorage]
-    H --> I[📚 Dashboard]
-    I --> J[📄 Export TXT]
-    I --> K[🔍 Busca & Filtros]
-    
-    style A fill:#e1f5fe
-    style F fill:#fff3e0
-    style H fill:#f3e5f5
-    style J fill:#e8f5e8
+```
+🔤 Transcrição automática completa
+📋 Resumo executivo inteligente
+👥 Identificação de participantes
+✅ Extração de ações e decisões
+⏰ Timeline detalhada da reunião
+📊 Métricas de produtividade
+🎭 Análise de sentimento
+🏷️ Categorização automática
 ```
 
-## 🔄 Fluxo da Aplicação
+### 📊 **Gestão Inteligente**
+```
+📚 Histórico completo organizado
+🔍 Busca por conteúdo e participantes
+📅 Filtros por período (hoje/semana/mês)
+📈 Estatísticas consolidadas
+📄 Export individual em TXT
+💾 Armazenamento local seguro
+```
+
+---
+
+## 🏗️ Arquitetura
+
+<div align="center">
 
 ```mermaid
-flowchart LR
-    Start([🚀 Iniciar]) --> Setup{🔧 API Configurada?}
-    Setup -->|Não| Config[⚙️ Configurar Gemini API]
-    Setup -->|Sim| Choose{📝 Escolher Ação}
-    Config --> Choose
+graph TB
+    subgraph "🎤 Frontend"
+        A[👤 Usuário] --> B[🎯 Interface Moderna]
+        B --> C[📊 Monitor Tempo Real]
+        B --> D[💾 Gravação de Áudio]
+        B --> E[📁 Upload de Arquivos]
+    end
     
-    Choose -->|Gravar| Record[🎤 Iniciar Gravação]
-    Choose -->|Upload| Upload[📁 Upload Arquivo]
-    Choose -->|Histórico| History[📚 Ver Histórico]
+    subgraph "🤖 IA Processing"
+        D --> F[🧠 Google Gemini 2.5 Flash]
+        E --> F
+        F --> G[📝 Análise Completa]
+    end
     
-    Record --> Monitor[📊 Monitor Tempo Real]
-    Monitor --> Controls[⏸️ Controles de Gravação]
-    Controls --> Stop[⏹️ Finalizar]
+    subgraph "💾 Storage & UI"
+        G --> H[💽 LocalStorage]
+        H --> I[📚 Dashboard]
+        I --> J[📄 Export TXT]
+        I --> K[🔍 Busca & Filtros]
+    end
     
-    Upload --> Process[🤖 Processar com IA]
-    Stop --> Process
-    
-    Process --> Analysis[📋 Análise Completa]
-    Analysis --> Save[💾 Salvar Local]
-    Save --> Download[⬇️ Auto Download TXT]
-    Download --> History
-    
-    History --> Details[📄 Ver Detalhes]
-    Details --> Search[🔍 Buscar & Filtrar]
-    Details --> Export[📤 Exportar TXT]
-    
-    style Start fill:#81c784
-    style Process fill:#ffb74d
-    style Analysis fill:#9575cd
-    style Save fill:#4fc3f7
+    style A fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    style F fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style H fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style J fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
 ```
+
+</div>
+
+---
 
 ## 🛠️ Stack Tecnológica
 
-### **Frontend & UI**
-- **Next.js 15** - Framework React com App Router e Turbopack
-- **TypeScript** - Tipagem estática para maior robustez
-- **Tailwind CSS** - Estilização utilitária e responsiva
-- **Shadcn/UI** - Componentes elegantes e acessíveis
-- **Radix UI** - Primitives para componentes complexos
-- **Lucide React** - Ícones modernos e consistentes
+<div align="center">
 
-### **Gravação & Áudio**
-- **Web Audio API** - Monitoramento em tempo real
-- **MediaRecorder API** - Gravação nativa do navegador
-- **MediaDevices API** - Seleção de dispositivos
-- **AnalyserNode** - Análise de frequência e nível
+### Frontend & UI
+![Next JS](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
+![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![Radix UI](https://img.shields.io/badge/Radix%20UI-161618?style=for-the-badge&logo=radix-ui&logoColor=white)
 
-### **Inteligência Artificial**
-- **Google Gemini 2.5 Flash** - Transcrição e análise de áudio
-- **Generative AI SDK** - Integração oficial do Google
+### Audio & AI
+![Web Audio API](https://img.shields.io/badge/Web_Audio_API-FF6B00?style=for-the-badge&logo=webaudio&logoColor=white)
+![Google Gemini](https://img.shields.io/badge/Google_Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white)
 
-### **Armazenamento & Dados**
-- **LocalStorage** - Persistência local sem servidor
-- **Blob API** - Manipulação de arquivos de áudio
-- **File API** - Upload e processamento de arquivos
-- **JSON** - Estrutura de dados para reuniões
+### Storage & Tools
+![LocalStorage](https://img.shields.io/badge/LocalStorage-FFA500?style=for-the-badge&logo=html5&logoColor=white)
+![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)
 
-## 📋 Pré-requisitos
+</div>
 
-- **Node.js** 18+ ([Download](https://nodejs.org/))
-- **NPM** ou **Yarn** para gerenciamento de pacotes
-- **Google Gemini API Key** ([Obter grátis](https://makersuite.google.com/app/apikey))
-- **Navegador moderno** com suporte a:
-  - MediaRecorder API
-  - Web Audio API
-  - LocalStorage
-  - ES2020+
+---
 
-> **🎉 Super Simples:** Não precisa de banco de dados, autenticação, servidor backend ou configurações complexas!
+## ⚡ Instalação
 
-## ⚡ Instalação e Configuração
+<div align="center">
 
-### 1. **Clone e Configure**
+### 🚀 **3 Passos Simples**
+
+</div>
+
+<details>
+<summary><b>📥 1. Clone o Repositório</b></summary>
 
 ```bash
-# Clone o repositório
-git clone https://github.com/seu-usuario/listen-meet.git
+# 🌟 Clone o projeto
+git clone https://github.com/HigorGabs/listen-meet.git
 cd listen-meet
 
-# Instale as dependências
+# 📦 Instale as dependências
 npm install
-
-# Execute em modo desenvolvimento
-npm run dev
 ```
 
-### 2. **Configure a API Key**
+</details>
 
-1. Acesse [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Crie um novo projeto (gratuito)
-3. Gere uma API Key
-4. Na primeira execução da aplicação, configure a chave
+<details>
+<summary><b>🔑 2. Configure Gemini API</b></summary>
 
-### 3. **Acesse a Aplicação**
-
-```
-http://localhost:3000
-```
-
-## 🎯 Guia de Uso
-
-### **1. Configuração Inicial**
-- Abra a aplicação no navegador
-- Configure sua API Key do Gemini (primeira vez)
-- Teste a configuração para validar
-
-### **2. Gravação Básica**
-- Clique em "Iniciar Gravação"
-- Permita acesso ao microfone
-- Use os controles (pause/play/stop)
-- A análise inicia automaticamente ao parar
-
-### **3. Configuração Avançada de Áudio**
-Para capturar áudio completo de reuniões online:
-
-#### **macOS (BlackHole)**
 ```bash
-# Instalar BlackHole
-brew install blackhole-2ch
+# 🌐 Obtenha sua API Key gratuita
+# https://makersuite.google.com/app/apikey
+
+# ⚙️ Configure na primeira execução da app
+# A chave é salva localmente no navegador
 ```
-1. Configure Aggregate Device no Audio MIDI Setup
-2. Combine seu microfone + BlackHole
-3. Configure Multi-Output para seus fones + BlackHole
 
-#### **Windows (VB-Cable)**
-1. Baixe e instale VB-Audio Virtual Cable
-2. Configure como dispositivo de saída do sistema
-3. Ative "Escutar este dispositivo"
+</details>
 
-### **4. Upload de Arquivos**
-- Clique em "Upload de Arquivo"
-- Selecione arquivo de áudio (MP3, WAV, etc.)
-- Aguarde processamento automático
+<details>
+<summary><b>🎯 3. Execute o Projeto</b></summary>
 
-### **5. Gestão do Histórico**
-- Acesse aba "Histórico"
-- Use busca para encontrar reuniões
-- Filtre por período
-- Expanda para ver análise completa
-- Exporte para TXT quando necessário
+```bash
+# 🚀 Inicie o servidor de desenvolvimento
+npm run dev
+
+# 🌍 Acesse no navegador
+# http://localhost:3000
+```
+
+</details>
+
+<div align="center">
+
+### 🎉 **Sem banco de dados • Sem autenticação • Sem configurações complexas!**
+
+</div>
+
+---
 
 ## 📊 O que a IA Analisa
 
-### **Estrutura da Análise**
+<div align="center">
+
+<img src="https://via.placeholder.com/1000x300/8B5CF6/FFFFFF?text=🤖+Google+Gemini+2.5+Flash+Analysis" alt="AI Analysis" style="border-radius: 15px; margin: 20px 0;" />
+
+</div>
+
+<details>
+<summary><b>📋 Estrutura Completa da Análise</b></summary>
+
 ```json
 {
-  "title": "Título sugerido da reunião",
-  "summary": "Resumo executivo conciso",
-  "overview": "Visão geral detalhada",
-  "keyPoints": ["Pontos principais identificados"],
-  "actionItems": ["Ações e próximos passos"],
-  "participants": ["Lista de participantes"],
-  "topics": ["Tópicos principais abordados"],
+  "title": "📝 Título sugerido da reunião",
+  "summary": "📄 Resumo executivo conciso",
+  "overview": "👁️ Visão geral detalhada",
+  "keyPoints": ["🎯 Pontos principais identificados"],
+  "actionItems": ["✅ Ações e próximos passos"],
+  "participants": ["👥 Lista de participantes"],
+  "topics": ["💬 Tópicos principais abordados"],
   "metrics": {
-    "efficiency": "Percentual de eficiência",
-    "engagement": "Nível de engajamento",
-    "decisionsCount": "Número de decisões tomadas"
+    "efficiency": "📊 Percentual de eficiência",
+    "engagement": "🔥 Nível de engajamento",
+    "decisionsCount": "⚡ Número de decisões tomadas"
   },
   "timeline": [
-    {"phase": "Início", "description": "O que aconteceu", "time": "0-5min"}
+    {"phase": "⏰ Início", "description": "📝 O que aconteceu", "time": "🕐 0-5min"}
   ],
   "tags": {
-    "meetingType": "Planejamento/Review/Brainstorm",
-    "priority": "Alta/Média/Baixa",
-    "status": "Concluída/Pendente"
+    "meetingType": "🏷️ Planejamento/Review/Brainstorm",
+    "priority": "⭐ Alta/Média/Baixa",
+    "status": "✅ Concluída/Pendente"
   },
   "insights": {
-    "sentiment": "Tom geral da reunião",
-    "engagement": "Nível de participação",
-    "outcome": "Resultado obtido"
+    "sentiment": "😊 Tom geral da reunião",
+    "engagement": "🎯 Nível de participação",
+    "outcome": "🎁 Resultado obtido"
   },
   "participationAnalysis": [
     {
-      "participant": "Nome",
-      "talkTime": "40%",
-      "contributions": "Tipo de contribuição",
-      "role": "Papel na reunião"
+      "participant": "👤 Nome",
+      "talkTime": "🕒 40%",
+      "contributions": "💡 Tipo de contribuição",
+      "role": "🎭 Papel na reunião"
     }
   ],
-  "transcript": "Transcrição completa"
+  "transcript": "📄 Transcrição completa"
 }
 ```
 
-## 🔧 Configurações Avançadas
+</details>
 
-### **Personalização de Dispositivos**
-- Selecione microfone específico
-- Configure dispositivos virtuais para captura completa
-- Teste níveis de áudio antes da gravação
-
-### **Otimização de Performance**
-- A aplicação usa LocalStorage (sem limite rígido)
-- Arquivos de áudio são processados e descartados
-- Apenas metadados e análises são mantidos
-
-### **Segurança e Privacidade**
-- Todos os dados ficam no seu navegador
-- API Key armazenada localmente
-- Áudio enviado apenas para processamento (não armazenado)
-- Sem rastreamento ou coleta de dados
+---
 
 ## 🎯 Casos de Uso
 
-### **Empresarial**
-- 📋 Reuniões de equipe e alinhamentos
-- 🎯 Sessões de brainstorming
-- 📊 Reuniões de planejamento estratégico
-- 🤝 Negociações e acordos comerciais
-- 📈 Reviews e retrospectivas
+<div align="center">
 
-### **Acadêmico**
-- 🎓 Aulas e palestras
-- 👥 Grupos de estudo
-- 📚 Seminários e workshops
-- 🔬 Reuniões de pesquisa
-- 📝 Entrevistas acadêmicas
+| 🏢 **Empresarial** | 🎓 **Acadêmico** | 👤 **Pessoal** |
+|:---:|:---:|:---:|
+| ![Business](https://img.icons8.com/fluency/64/000000/business.png) | ![Education](https://img.icons8.com/fluency/64/000000/education.png) | ![Personal](https://img.icons8.com/fluency/64/000000/user.png) |
+| Reuniões de equipe<br/>Brainstorming<br/>Negociações | Aulas e palestras<br/>Grupos de estudo<br/>Seminários | Entrevistas<br/>Podcasts<br/>Práticas |
 
-### **Pessoal**
-- 💡 Entrevistas e podcasts
-- 📝 Notas de voz organizadas
-- 🗣️ Práticas de apresentação
-- 📞 Calls importantes
-- 🎤 Gravações criativas
+</div>
 
-## 🔮 Tecnologias e Funcionalidades
+---
 
-### **Gravação de Áudio**
-- ✅ Seleção de dispositivo de entrada
-- ✅ Monitoramento visual em tempo real
-- ✅ Controles de pausa/retomada
-- ✅ Teste de áudio antes da gravação
-- ✅ Suporte a múltiplos formatos
-- ✅ Upload de arquivos existentes
+## 🔧 Configuração Avançada
 
-### **Processamento com IA**
-- ✅ Transcrição completa e precisa
-- ✅ Resumo executivo inteligente
-- ✅ Identificação de participantes
-- ✅ Extração de ações e decisões
-- ✅ Timeline detalhada da reunião
-- ✅ Métricas de eficiência
-- ✅ Análise de sentimento
-- ✅ Categorização automática
-- ✅ Insights comportamentais
+<details>
+<summary><b>🍎 macOS - BlackHole Setup</b></summary>
 
-### **Interface e Usabilidade**
-- ✅ Design responsivo e moderno
-- ✅ Tema escuro/claro automático
-- ✅ Navegação intuitiva
-- ✅ Busca e filtros avançados
-- ✅ Export para TXT
-- ✅ Tooltips e ajuda contextual
+```bash
+# 📦 Instalar BlackHole
+brew install blackhole-2ch
+
+# ⚙️ Configurar no Audio MIDI Setup:
+# 1. Criar Aggregate Device
+# 2. Combinar microfone + BlackHole
+# 3. Configurar Multi-Output Device
+```
+
+</details>
+
+<details>
+<summary><b>🪟 Windows - VB-Cable Setup</b></summary>
+
+```bash
+# 📥 Baixar VB-Audio Virtual Cable
+# https://vb-audio.com/Cable/
+
+# ⚙️ Configurar:
+# 1. Instalar VB-Cable
+# 2. Configurar como saída do sistema
+# 3. Ativar "Escutar este dispositivo"
+```
+
+</details>
+
+---
+
+## 🔮 Roadmap
+
+<div align="center">
+
+```mermaid
+timeline
+    title 🚀 Listen Meet Roadmap
+    
+    section v1.0 ✅
+        Gravação de áudio      : ✅ Web Audio API
+                                : ✅ Controles profissionais
+                                : ✅ Seleção de dispositivos
+        
+        IA & Análise          : ✅ Google Gemini 2.5 Flash
+                              : ✅ Transcrição completa
+                              : ✅ Análise comportamental
+        
+        Interface             : ✅ Dashboard moderno
+                              : ✅ Busca e filtros
+                              : ✅ Export TXT
+    
+    section v2.0 🔄
+        Integração            : 📅 Google Calendar
+                              : 📅 Microsoft Outlook
+                              : 📅 Zoom/Teams webhook
+        
+        Tempo Real            : ⚡ Transcrição ao vivo
+                              : ⚡ Legendas dinâmicas
+                              : ⚡ Notificações smart
+    
+    section v2.1 🌟
+        Colaboração           : 👥 Compartilhamento
+                              : 👥 Comentários
+                              : 👥 Templates personalizados
+        
+        Analytics             : 📊 Relatórios avançados
+                              : 📊 Métricas de time
+                              : 📊 Insights de produtividade
+    
+    section v3.0 🌍
+        Expansão              : 📱 Mobile App
+                              : 🌐 Multiple idiomas
+                              : ☁️ Cloud backup
+                              : 🔗 API pública
+```
+
+</div>
+
+---
 
 ## 🤝 Contribuição
 
-Contribuições são sempre bem-vindas! 
+<div align="center">
 
-### **Como Contribuir**
-1. **Fork** o projeto
-2. **Clone** sua fork: `git clone https://github.com/seu-usuario/listen-meet.git`
-3. **Crie** uma branch: `git checkout -b feature/nova-funcionalidade`
-4. **Faça** suas alterações
-5. **Teste** tudo funcionando: `npm run build && npm run dev`
-6. **Commit**: `git commit -m "feat: adiciona nova funcionalidade"`
-7. **Push**: `git push origin feature/nova-funcionalidade`
-8. **Abra** um Pull Request
+### 💪 **Junte-se à comunidade Listen Meet!**
 
-### **Áreas para Contribuição**
-- 🎨 Melhorias na interface
-- 🤖 Novos prompts para IA
-- 🔧 Otimizações de performance
-- 📱 Responsividade mobile
-- 🌐 Internacionalização
-- 📖 Documentação
+<img src="https://contrib-readme.vercel.app/api?username=HigorGabs" alt="Contribution Graph" />
 
-### **Reportar Bugs**
-Abra uma [issue](https://github.com/seu-usuario/listen-meet/issues) com:
-- 🐛 Descrição clara do problema
-- 🔄 Passos para reproduzir
-- 🎯 Comportamento esperado vs atual
-- 📱 Informações do ambiente (OS, browser, versão)
-- 📸 Screenshots se aplicável
+</div>
+
+<details>
+<summary><b>🚀 Como Contribuir</b></summary>
+
+1. **🍴 Fork** o projeto
+2. **📥 Clone** sua fork: `git clone https://github.com/seu-usuario/listen-meet.git`
+3. **🌿 Crie** uma branch: `git checkout -b feature/nova-funcionalidade`
+4. **💻 Desenvolva** suas alterações
+5. **🧪 Teste** tudo: `npm run build && npm run dev`
+6. **💾 Commit**: `git commit -m "feat: adiciona nova funcionalidade"`
+7. **📤 Push**: `git push origin feature/nova-funcionalidade`
+8. **🔀 PR**: Abra um Pull Request
+
+</details>
+
+<details>
+<summary><b>🎯 Áreas para Contribuição</b></summary>
+
+- 🎨 **UI/UX**: Melhorias na interface
+- 🤖 **IA**: Novos prompts e análises
+- ⚡ **Performance**: Otimizações
+- 🌐 **i18n**: Internacionalização
+- 📱 **Mobile**: Responsividade
+- 📖 **Docs**: Documentação
+
+</details>
+
+<details>
+<summary><b>🐛 Reportar Bugs</b></summary>
+
+Abra uma [issue](https://github.com/HigorGabs/listen-meet/issues) com:
+
+- 🐛 **Descrição** clara do problema
+- 🔄 **Passos** para reproduzir
+- 🎯 **Comportamento** esperado vs atual
+- 📱 **Ambiente** (OS, browser, versão)
+- 📸 **Screenshots** se aplicável
+
+</details>
+
+---
 
 ## 📄 Licença
 
-Este projeto está sob a licença **MIT**. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+<div align="center">
+
+Este projeto está sob a licença **MIT** - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
+
+</div>
+
+---
 
 ## 👨‍💻 Autor
 
-**Desenvolvido com ❤️ por Higor**
+<div align="center">
 
-- 🌐 [Website](https://seu-website.com)
-- 💼 [LinkedIn](https://linkedin.com/in/seu-perfil)  
-- 🐙 [GitHub](https://github.com/seu-usuario)
-- 📧 [Email](mailto:seu-email@exemplo.com)
+<img src="https://github.com/HigorGabs.png" alt="Higor" width="100" style="border-radius: 50%; border: 3px solid #4F46E5;" />
+
+**Desenvolvido com ❤️ por [Higor](https://github.com/HigorGabs)**
+
+[![Portfolio](https://img.shields.io/badge/Portfolio-FF5722?style=for-the-badge&logo=todoist&logoColor=white)](https://seu-website.com)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/seu-perfil)
+[![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/HigorGabs)
+[![Email](https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:seu-email@exemplo.com)
+
+</div>
+
+---
 
 ## 🙏 Agradecimentos
 
-- **Google** pelo poderoso Gemini AI
-- **Vercel** pelo incrível Next.js
-- **Shadcn** pelos componentes UI elegantes
-- **Radix UI** pelos primitives acessíveis
-- **Tailwind** pelo sistema de design
-- **Comunidade Open Source** pelo apoio constante
+<div align="center">
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="https://developers.google.com/static/ai/images/ai-logo.svg" alt="Google AI" width="60"/>
+      <br />
+      <b>Google Gemini</b>
+    </td>
+    <td align="center">
+      <img src="https://assets.vercel.com/image/upload/v1662130559/nextjs/Icon_light_background.png" alt="Next.js" width="60"/>
+      <br />
+      <b>Next.js</b>
+    </td>
+    <td align="center">
+      <img src="https://ui.shadcn.com/favicon.ico" alt="Shadcn/UI" width="60"/>
+      <br />
+      <b>Shadcn/UI</b>
+    </td>
+    <td align="center">
+      <img src="https://www.radix-ui.com/favicon.ico" alt="Radix UI" width="60"/>
+      <br />
+      <b>Radix UI</b>
+    </td>
+  </tr>
+</table>
+
+**Obrigado à incrível comunidade open source! 🌟**
+
+</div>
 
 ---
 
 <div align="center">
 
+![Footer](https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=0,2,2,30,26&height=200&section=footer&text=Listen%20Meet&fontSize=50&fontColor=fff&desc=Transforme%20suas%20reuniões%20hoje%20mesmo!&descSize=16&descAlignY=70)
+
 **⭐ Se este projeto foi útil, deixe uma estrela!**
 
-[🚀 Demo ao Vivo](https://listen-meet.vercel.app) • [🐛 Reportar Bug](https://github.com/seu-usuario/listen-meet/issues) • [💬 Discussões](https://github.com/seu-usuario/listen-meet/discussions) • [📖 Wiki](https://github.com/seu-usuario/listen-meet/wiki)
+[![Stars](https://img.shields.io/github/stars/HigorGabs/listen-meet?style=social)](https://github.com/HigorGabs/listen-meet/stargazers)
+[![Forks](https://img.shields.io/github/forks/HigorGabs/listen-meet?style=social)](https://github.com/HigorGabs/listen-meet/network/members)
+
+[🚀 **Demo ao Vivo**](https://listen-meet.vercel.app) • [🐛 **Reportar Bug**](https://github.com/HigorGabs/listen-meet/issues) • [💬 **Discussões**](https://github.com/HigorGabs/listen-meet/discussions)
 
 **Transforme suas reuniões em insights acionáveis hoje mesmo! 🎤✨**
 
