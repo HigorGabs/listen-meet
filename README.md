@@ -31,7 +31,7 @@
 
 <div align="center">
   
-![read](https://github.com/user-attachments/assets/0de1d1f6-0ae8-4081-af93-d66126dc8dab)
+  ![ng](https://github.com/user-attachments/assets/d0d491b5-7a22-44f6-8cca-e4210ede785f)
 
 
 |  **Gravação Inteligente** |  **IA Avançada** |  **Interface Moderna** |
