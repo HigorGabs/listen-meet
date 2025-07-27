@@ -33,7 +33,7 @@
 
 | 🎯 **Gravação Inteligente** | 🤖 **IA Avançada** | 📊 **Dashboard Moderno** |
 |:---:|:---:|:---:|
-| ![Recording](https://img.icons8.com/fluency/96/000000/microphone.png) | ![AI](https://img.icons8.com/fluency/96/000000/artificial-intelligence.png) | ![Dashboard](https://img.icons8.com/fluency/96/000000/dashboard.png) |
+| ![Recording](https://img.icons8.com/fluency/96/microphone.png) | ![AI](https://img.icons8.com/fluency/96/artificial-intelligence.png) | ![Dashboard](https://img.icons8.com/fluency/96/dashboard.png) |
 | Gravação em tempo real<br/>Controles profissionais<br/>Teste de áudio | Transcrição automática<br/>Análise comportamental<br/>Insights inteligentes | Histórico organizado<br/>Busca avançada<br/>Export para TXT |
 
 </div>
@@ -246,7 +246,7 @@ npm run dev
 
 | 🏢 **Empresarial** | 🎓 **Acadêmico** | 👤 **Pessoal** |
 |:---:|:---:|:---:|
-| ![Business](https://img.icons8.com/fluency/64/000000/business.png) | ![Education](https://img.icons8.com/fluency/64/000000/education.png) | ![Personal](https://img.icons8.com/fluency/64/000000/user.png) |
+| ![Business](https://img.icons8.com/fluency/64/business.png) | ![Education](https://img.icons8.com/fluency/64/education.png) | ![Personal](https://img.icons8.com/fluency/64/user.png) |
 | Reuniões de equipe<br/>Brainstorming<br/>Negociações | Aulas e palestras<br/>Grupos de estudo<br/>Seminários | Entrevistas<br/>Podcasts<br/>Práticas |
 
 </div>
