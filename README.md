@@ -406,51 +406,16 @@ Este projeto está sob a licença **MIT** - veja o arquivo [LICENSE](LICENSE) pa
 
 <img src="https://github.com/HigorGabs.png" alt="Higor" width="100" style="border-radius: 50%; border: 3px solid #4F46E5;" />
 
-**Desenvolvido com ❤️ por [Higor](https://github.com/HigorGabs)**
+**Desenvolvido com [❤️](https://github.com/HigorGabs)**
 
-[![Portfolio](https://img.shields.io/badge/Portfolio-FF5722?style=for-the-badge&logo=todoist&logoColor=white)](https://seu-website.com)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/seu-perfil)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/higorgabs)
 [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/HigorGabs)
-[![Email](https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:seu-email@exemplo.com)
+[![Email](https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:higorgabs@icloud.com)
 
 </div>
 
 ---
 
-## 🙏 Agradecimentos
-
-<div align="center">
-
-<table>
-  <tr>
-    <td align="center">
-      <img src="https://developers.google.com/static/ai/images/ai-logo.svg" alt="Google AI" width="60"/>
-      <br />
-      <b>Google Gemini</b>
-    </td>
-    <td align="center">
-      <img src="https://assets.vercel.com/image/upload/v1662130559/nextjs/Icon_light_background.png" alt="Next.js" width="60"/>
-      <br />
-      <b>Next.js</b>
-    </td>
-    <td align="center">
-      <img src="https://ui.shadcn.com/favicon.ico" alt="Shadcn/UI" width="60"/>
-      <br />
-      <b>Shadcn/UI</b>
-    </td>
-    <td align="center">
-      <img src="https://www.radix-ui.com/favicon.ico" alt="Radix UI" width="60"/>
-      <br />
-      <b>Radix UI</b>
-    </td>
-  </tr>
-</table>
-
-**Obrigado à incrível comunidade open source! 🌟**
-
-</div>
-
----
 
 <div align="center">
 
