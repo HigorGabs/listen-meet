@@ -190,7 +190,7 @@ npm run dev
 
 <div align="center">
 
-<img src="https://via.placeholder.com/1000x300/8B5CF6/FFFFFF?text=🤖+Google+Gemini+2.5+Flash+Analysis" alt="AI Analysis" style="border-radius: 15px; margin: 20px 0;" />
+![Google Gemini 2.5 Flash](https://img.shields.io/badge/Google_Gemini-2.5_Flash-8B5CF6?style=for-the-badge&logo=google&logoColor=white&labelColor=4C1D95)
 
 </div>
 
@@ -246,7 +246,7 @@ npm run dev
 
 | 🏢 **Empresarial** | 🎓 **Acadêmico** | 👤 **Pessoal** |
 |:---:|:---:|:---:|
-| ![Business](https://img.icons8.com/fluency/64/business.png) | ![Education](https://img.icons8.com/fluency/64/education.png) | ![Personal](https://img.icons8.com/fluency/64/user.png) |
+| ![Business](https://img.icons8.com/fluency/64/business.png) | ![Education](https://img.icons8.com/color/64/000000/student-center.png) | ![Personal](https://img.icons8.com/color/64/000000/user.png) |
 | Reuniões de equipe<br/>Brainstorming<br/>Negociações | Aulas e palestras<br/>Grupos de estudo<br/>Seminários | Entrevistas<br/>Podcasts<br/>Práticas |
 
 </div>
