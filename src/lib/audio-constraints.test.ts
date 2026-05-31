@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   MAX_AUDIO_UPLOAD_BYTES,
   MIN_RECORDING_DURATION_SECONDS,
+  getAudioFilenameForBlob,
   getBaseMimeType,
+  getAudioMimeType,
   isAllowedAudioType,
   shouldProcessRecording,
   validateAudioSignature,
@@ -30,10 +32,32 @@ describe('audio constraints', () => {
     expect(getBaseMimeType('audio/webm;codecs=opus')).toBe('audio/webm')
   })
 
+  it('maps generic MIME types to Gemini-compatible audio MIME types from extensions', () => {
+    expect(getAudioMimeType('meeting.mp3', 'application/octet-stream')).toBe('audio/mp3')
+    expect(getAudioMimeType('meeting.3gp', '')).toBe('audio/3gpp')
+    expect(getAudioMimeType('meeting.webm', 'audio/webm;codecs=opus')).toBe('audio/webm')
+  })
+
+  it('creates recording filenames that match the recorded container MIME type', () => {
+    expect(getAudioFilenameForBlob(new Blob(['audio'], { type: 'audio/mp4' }))).toBe('recording.mp4')
+    expect(getAudioFilenameForBlob(new Blob(['audio'], { type: 'audio/webm;codecs=opus' }))).toBe('recording.webm')
+  })
+
   it('accepts files with empty MIME type when the extension is supported', () => {
     expect(isAllowedAudioType({
       name: 'meeting.mp3',
       type: '',
+    })).toBe(true)
+  })
+
+  it('accepts 3GPP MIME types advertised by the upload allowlist', () => {
+    expect(isAllowedAudioType({
+      name: 'meeting.3gp',
+      type: 'audio/3gpp',
+    })).toBe(true)
+    expect(isAllowedAudioType({
+      name: 'meeting.3gp',
+      type: 'video/3gpp',
     })).toBe(true)
   })
 
@@ -67,6 +91,19 @@ describe('audio constraints', () => {
     })
 
     expect(result.valid).toBe(true)
+  })
+
+  it('accepts AAC ADTS frames with and without CRC protection', () => {
+    expect(validateAudioSignature({
+      name: 'meeting.aac',
+      type: 'audio/aac',
+      bytes: new Uint8Array([0xff, 0xf0, 0x50, 0x80]),
+    }).valid).toBe(true)
+    expect(validateAudioSignature({
+      name: 'meeting.aac',
+      type: 'audio/aac',
+      bytes: new Uint8Array([0xff, 0xf9, 0x50, 0x80]),
+    }).valid).toBe(true)
   })
 
   it('rejects empty files', () => {

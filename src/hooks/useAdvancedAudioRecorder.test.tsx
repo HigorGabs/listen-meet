@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAdvancedAudioRecorder } from './useAdvancedAudioRecorder'
 
 class MockMediaRecorder {
-  static isTypeSupported = vi.fn(() => true)
+  static isTypeSupported = vi.fn((_type: string) => true)
   static instances: MockMediaRecorder[] = []
 
   ondataavailable: ((event: { data: Blob }) => void) | null = null
@@ -98,5 +98,28 @@ describe('useAdvancedAudioRecorder', () => {
     expect(recorder?.stop).toHaveBeenCalled()
     expect(clearIntervalSpy).toHaveBeenCalled()
     expect(closeAudioContext).toHaveBeenCalled()
+  })
+
+  it('preserves the selected recording container in the generated filename', async () => {
+    MockMediaRecorder.isTypeSupported.mockImplementation((type) => type === 'audio/mp4')
+    const { result } = renderHook(() => useAdvancedAudioRecorder())
+
+    await waitFor(() => {
+      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1)
+    })
+
+    await act(async () => {
+      await result.current.startRecording()
+    })
+
+    const recorder = MockMediaRecorder.instances.at(-1)
+    await act(async () => {
+      recorder?.ondataavailable?.({ data: new Blob(['audio'], { type: 'audio/mp4' }) })
+      result.current.stopRecording()
+    })
+
+    await waitFor(() => {
+      expect(result.current.recordingData?.filename).toBe('recording.mp4')
+    })
   })
 })

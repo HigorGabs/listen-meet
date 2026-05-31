@@ -6,8 +6,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -132,9 +130,9 @@ export function StudioCommandRail({
                   <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--studio-muted)]">
                     {t.theme.label}
                   </p>
-                  <DropdownMenuRadioGroup
-                    value={theme}
-                    onValueChange={(value) => onThemeChange(value as StudioThemeId)}
+                  <div
+                    role="group"
+                    aria-label={t.theme.label}
                     className="grid grid-cols-2 gap-1 rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] p-1"
                   >
                     {STUDIO_THEMES.map((item) => {
@@ -142,12 +140,15 @@ export function StudioCommandRail({
                       const icon = item.id === 'dark' ? 'dark_mode' : 'light_mode'
 
                       return (
-                        <DropdownMenuRadioItem
+                        <DropdownMenuItem
                           key={item.id}
-                          value={item.id}
-                          onSelect={(event) => event.preventDefault()}
+                          aria-current={isActive ? 'true' : undefined}
+                          onSelect={(event) => {
+                            event.preventDefault()
+                            onThemeChange(item.id)
+                          }}
                           className={cn(
-                            'h-10 justify-center gap-2 rounded-md border px-2 pl-2 text-sm font-medium transition-colors',
+                            'h-10 cursor-pointer justify-center gap-2 rounded-md border px-2 text-sm font-medium transition-colors',
                             isActive
                               ? 'border-[color:var(--studio-primary-border)] bg-[var(--studio-primary-soft)] text-[var(--studio-text)] shadow-[inset_0_0_0_1px_var(--studio-primary-border)]'
                             : 'border-transparent text-[var(--studio-muted)] hover:bg-[var(--studio-panel)] hover:text-[var(--studio-text)]'
@@ -155,19 +156,19 @@ export function StudioCommandRail({
                         >
                           <MaterialIcon name={icon} className={cn('text-base', isActive && 'text-[var(--studio-primary)]')} />
                           <span>{t.theme[item.id]}</span>
-                        </DropdownMenuRadioItem>
+                        </DropdownMenuItem>
                       )
                     })}
-                  </DropdownMenuRadioGroup>
+                  </div>
                 </section>
 
                 <section className="grid gap-2">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--studio-muted)]">
                     {t.locale.label}
                   </p>
-                  <DropdownMenuRadioGroup
-                    value={locale}
-                    onValueChange={(value) => onLocaleChange(value as Locale)}
+                  <div
+                    role="group"
+                    aria-label={t.locale.label}
                     className="grid grid-cols-2 gap-1 rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] p-1"
                   >
                     {SUPPORTED_LOCALES.map((item) => {
@@ -175,23 +176,26 @@ export function StudioCommandRail({
                       const localeCode = item.id === 'pt-BR' ? 'BR' : 'EN'
 
                       return (
-                        <DropdownMenuRadioItem
+                        <DropdownMenuItem
                           key={item.id}
-                          value={item.id}
-                          onSelect={(event) => event.preventDefault()}
+                          aria-current={isActive ? 'true' : undefined}
+                          onSelect={(event) => {
+                            event.preventDefault()
+                            onLocaleChange(item.id)
+                          }}
                           title={item.label}
                           className={cn(
-                            'h-10 justify-center gap-2 rounded-md border px-2 pl-2 text-sm font-semibold tracking-[0.08em] transition-colors',
+                            'h-10 cursor-pointer justify-center gap-2 rounded-md border px-2 text-sm font-semibold tracking-[0.08em] transition-colors',
                             isActive
                               ? 'border-[color:var(--studio-secondary-border)] bg-[var(--studio-secondary-soft)] text-[var(--studio-text)] shadow-[inset_0_0_0_1px_var(--studio-secondary-border)]'
-                              : 'border-transparent text-[var(--studio-muted)] hover:bg-[var(--studio-panel)] hover:text-[var(--studio-text)]'
+                            : 'border-transparent text-[var(--studio-muted)] hover:bg-[var(--studio-panel)] hover:text-[var(--studio-text)]'
                           )}
                         >
                           <span>{localeCode}</span>
-                        </DropdownMenuRadioItem>
+                        </DropdownMenuItem>
                       )
                     })}
-                  </DropdownMenuRadioGroup>
+                  </div>
                 </section>
               </div>
               <DropdownMenuSeparator className="bg-[var(--studio-border)]" />

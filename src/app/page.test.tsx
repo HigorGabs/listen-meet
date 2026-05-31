@@ -4,12 +4,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Home from './page'
 
 vi.mock('@/components/AdvancedAudioRecorder', () => ({
-  AdvancedAudioRecorder: ({ onReadinessChange }: {
+  AdvancedAudioRecorder: ({ onReadinessChange, onRecordingComplete }: {
     onReadinessChange?: (readiness: {
       hasAudioDevice: boolean
       hasAudioSignal: boolean
       hasCaptureError: boolean
     }) => void
+    onRecordingComplete?: (data: {
+      blob: Blob
+      duration: number
+      filename?: string
+      source: 'recording' | 'upload'
+    }) => void | Promise<void>
   }) => (
     <div>
       Console de captura mockado
@@ -23,9 +29,30 @@ vi.mock('@/components/AdvancedAudioRecorder', () => ({
       >
         Simular áudio pronto
       </button>
+      <button
+        type="button"
+        onClick={() => onRecordingComplete?.({
+          blob: new Blob(['audio'], { type: 'audio/mp4' }),
+          duration: 125,
+          source: 'recording',
+        })}
+      >
+        Simular gravação completa
+      </button>
     </div>
   ),
 }))
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
 
 vi.mock('@/components/MeetingsList', () => ({
   MeetingsList: () => <div>Arquivo inteligente mockado</div>,
@@ -55,6 +82,20 @@ const modelsResponse = {
       id: 'gemini-flash-latest',
       name: 'Gemini Flash Latest',
       provider: 'gemini',
+      recommended: true,
+    },
+  ],
+}
+
+const openRouterModelsResponse = {
+  provider: 'openrouter',
+  configuredByServer: true,
+  defaultModel: 'openrouter/audio-model',
+  models: [
+    {
+      id: 'openrouter/audio-model',
+      name: 'OpenRouter Audio Model',
+      provider: 'openrouter',
       recommended: true,
     },
   ],
@@ -125,8 +166,8 @@ describe('Home page studio shell', () => {
     expect(screen.queryByLabelText('Idioma')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /configurações/i }))
-    await userEvent.click(screen.getByRole('menuitemradio', { name: /white/i }))
-    await userEvent.click(screen.getByRole('menuitemradio', { name: /^EN$/ }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /white/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^EN$/ }))
 
     expect(document.documentElement).toHaveAttribute('data-theme', 'white')
     expect(localStorage.getItem('listen-meet-theme')).toBe('white')
@@ -178,5 +219,116 @@ describe('Home page studio shell', () => {
     await userEvent.click(screen.getByRole('button', { name: /usar configuração/i }))
 
     expect(sessionStorage.getItem('listen-meet-ai-config')).not.toContain('secret-session-key')
+  })
+
+  it('saves meeting locale and provider metadata for future history downloads', async () => {
+    vi.mocked(fetch).mockReset()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => providersResponse,
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => modelsResponse,
+      } as Response)
+      .mockImplementationOnce(async (_input, init) => {
+        const formData = init?.body as FormData
+        const audio = formData.get('audio') as File
+        expect(audio.name).toBe('recording.mp4')
+        expect(formData.get('locale')).toBe('en')
+
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            summary: {
+              title: 'Product Sync',
+              overview: 'The team discussed onboarding.',
+              keyPoints: ['Improve onboarding'],
+              actionItems: ['Review activation'],
+              participants: ['Higor'],
+              topics: ['Product'],
+            },
+            filename: 'meeting.txt',
+            duration: 125,
+          }),
+        } as Response
+      })
+
+    render(<Home />)
+
+    await screen.findByText('Estúdio de Gravação')
+    await userEvent.click(screen.getByRole('button', { name: /configurações/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^EN$/ }))
+    await userEvent.click(screen.getByRole('button', { name: /simular gravação completa/i }))
+
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem('listen-meet-recordings') || '[]')
+      expect(saved[0]).toMatchObject({
+        locale: 'en',
+        providerName: 'Google Gemini',
+        modelName: 'Gemini Flash Latest',
+      })
+    })
+  })
+
+  it('ignores stale model-list responses when provider switches race', async () => {
+    const staleOpenRouterModels = createDeferred<Response>()
+    const currentGeminiModels = createDeferred<Response>()
+    vi.mocked(fetch).mockReset()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          providers: [
+            ...providersResponse.providers,
+            {
+              id: 'openrouter',
+              name: 'OpenRouter',
+              apiKeyLabel: 'OpenRouter API Key',
+              serverEnvVar: 'OPENROUTER_API_KEY',
+              supportsAudioProcessing: true,
+              requiresApiKeyForModels: false,
+              configured: true,
+              defaultModel: 'openrouter/audio-model',
+            },
+          ],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => modelsResponse,
+      } as Response)
+      .mockImplementationOnce(() => staleOpenRouterModels.promise)
+      .mockImplementationOnce(() => currentGeminiModels.promise)
+
+    render(<Home />)
+
+    await screen.findByText('Estúdio de Gravação')
+    await userEvent.click(screen.getByRole('button', { name: /configurações/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^API$/i }))
+
+    await userEvent.click(screen.getAllByRole('combobox')[0])
+    await userEvent.click(await screen.findByRole('option', { name: /OpenRouter/i }))
+    await userEvent.click(screen.getAllByRole('combobox')[0])
+    await userEvent.click(await screen.findByRole('option', { name: /Google Gemini/i }))
+
+    currentGeminiModels.resolve({
+      ok: true,
+      json: async () => modelsResponse,
+    } as Response)
+
+    await screen.findByText(/Gemini Flash Latest/i)
+
+    staleOpenRouterModels.resolve({
+      ok: true,
+      json: async () => openRouterModelsResponse,
+    } as Response)
+
+    await waitFor(() => {
+      expect(screen.queryByText(/OpenRouter Audio Model/i)).not.toBeInTheDocument()
+      expect(screen.getAllByText(/Gemini Flash Latest/i).length).toBeGreaterThan(0)
+    })
   })
 })

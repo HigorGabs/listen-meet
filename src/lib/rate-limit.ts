@@ -54,6 +54,9 @@ export function createRateLimiter({ windowMs, maxRequests }: RateLimitOptions) {
 }
 
 export function getClientIp(request: Request): string {
+  const trustProxyHeaders = process.env.LISTEN_MEET_TRUST_PROXY_HEADERS === 'true'
+  if (!trustProxyHeaders) return 'unknown'
+
   const forwardedFor = request.headers.get('x-forwarded-for')
   const realIp = request.headers.get('x-real-ip')
 

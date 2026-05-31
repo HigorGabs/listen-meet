@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { validateAudioFile } from '@/lib/audio-constraints'
+import { getAudioFilenameForBlob, validateAudioFile } from '@/lib/audio-constraints'
 
 export interface AudioDevice {
   deviceId: string
@@ -323,6 +323,7 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
           blob,
           duration: finalDuration,
           size: blob.size,
+          filename: getAudioFilenameForBlob(blob),
           source: 'recording'
         })
 

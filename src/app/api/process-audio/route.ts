@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import {
   MAX_AUDIO_UPLOAD_BYTES,
-  getBaseMimeType,
+  getAudioMimeType,
   validateAudioFile,
   validateAudioSignature,
 } from '@/lib/audio-constraints'
@@ -359,7 +359,7 @@ export async function POST(request: NextRequest) {
       ? await generateWithGeminiFallback(
           new GoogleGenerativeAI(apiKey),
           {
-            mimeType: getBaseMimeType(audioFile.type) || 'audio/webm',
+            mimeType: getAudioMimeType(audioFile.name, audioFile.type),
             data: audioBase64
           },
           prompt,

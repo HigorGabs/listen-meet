@@ -63,6 +63,9 @@ export interface MeetingRecord {
   date: string
   duration: number
   summary: MeetingSummary
+  locale?: 'pt-BR' | 'en'
+  providerName?: string
+  modelName?: string
   audioBlob?: Blob
   filename: string
 }
@@ -276,10 +279,12 @@ export function buildAllMeetingsTxt(meetings: MeetingRecord[]): string {
   if (meetings.length === 0) return 'Nenhuma reunião exportada.'
 
   return meetings.map((meeting) => {
+    const locale = normalizeExportLocale(meeting.locale)
+
     return `${'='.repeat(80)}
 REUNIÃO: ${meeting.summary.title}
-Data: ${formatMeetingDate(meeting.date, 'pt-BR')}
-Duração: ${formatMinutes(meeting.duration, 'pt-BR')}
+Data: ${formatMeetingDate(meeting.date, locale)}
+Duração: ${formatMinutes(meeting.duration, locale)}
 
 RESUMO: ${meeting.summary.summary || meeting.summary.overview}
 
@@ -291,6 +296,8 @@ ${numberedList(meeting.summary.actionItems)}
 
 PARTICIPANTES: ${meeting.summary.participants.length ? meeting.summary.participants.join(', ') : 'Participantes não identificados.'}
 TÓPICOS: ${meeting.summary.topics.length ? meeting.summary.topics.join(', ') : 'Tópicos não identificados.'}
+PROVEDOR: ${meeting.providerName || 'Google Gemini'}
+${meeting.modelName ? `MODELO: ${meeting.modelName}` : ''}
 
 ${'='.repeat(80)}
 `

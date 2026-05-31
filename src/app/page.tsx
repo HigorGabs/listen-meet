@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label'
 import { MaterialIcon } from '@/components/ui/material-icon'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { MeetingRecord, MeetingStorage } from '@/utils/storage'
-import { MAX_AUDIO_UPLOAD_MB } from '@/lib/audio-constraints'
+import { MAX_AUDIO_UPLOAD_MB, getAudioFilenameForBlob } from '@/lib/audio-constraints'
 import {
   AI_PROVIDERS,
   type AiModelOption,
@@ -98,6 +98,7 @@ export default function Home() {
     ? t.settings.apiSourceSession
     : t.settings.apiSourceServer
   const modelErrorTitleRef = useRef(t.settings.modelErrorTitle)
+  const modelRequestIdRef = useRef(0)
 
   useEffect(() => {
     modelErrorTitleRef.current = t.settings.modelErrorTitle
@@ -135,6 +136,10 @@ export default function Home() {
     nextApiKey: string,
     preferredModel?: string
   ) => {
+    const requestId = modelRequestIdRef.current + 1
+    modelRequestIdRef.current = requestId
+    const isCurrentRequest = () => modelRequestIdRef.current === requestId
+
     setIsLoadingModels(true)
     setModelError('')
 
@@ -154,6 +159,13 @@ export default function Home() {
       }
 
       const nextModels = result.models as AiModelOption[]
+      if (!isCurrentRequest()) {
+        return {
+          models: [],
+          selectedModel: '',
+        }
+      }
+
       setModels(nextModels)
 
       const preferred =
@@ -168,6 +180,13 @@ export default function Home() {
         selectedModel: preferred?.id || '',
       }
     } catch (error) {
+      if (!isCurrentRequest()) {
+        return {
+          models: [],
+          selectedModel: '',
+        }
+      }
+
       const message = error instanceof Error ? error.message : modelErrorTitleRef.current
       setModels([])
       setSelectedModel('')
@@ -177,7 +196,9 @@ export default function Home() {
         selectedModel: '',
       }
     } finally {
-      setIsLoadingModels(false)
+      if (isCurrentRequest()) {
+        setIsLoadingModels(false)
+      }
     }
   }, [])
 
@@ -339,7 +360,7 @@ export default function Home() {
 
     try {
       const formData = new FormData()
-      formData.append('audio', data.blob, data.filename || 'recording.webm')
+      formData.append('audio', data.blob, data.filename || getAudioFilenameForBlob(data.blob))
       formData.append('provider', provider)
       formData.append('model', selectedModel)
       if (apiSource === 'session' && apiKey.trim()) {
@@ -372,6 +393,9 @@ export default function Home() {
         date: new Date().toISOString(),
         duration: data.duration,
         summary: result.summary,
+        locale,
+        providerName: providerLabel(provider),
+        modelName: selectedModelName || selectedModel,
         filename: result.filename || `reuniao-${new Date().toISOString().split('T')[0]}.txt`
       }
 

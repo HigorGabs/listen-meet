@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { createRateLimiter, getClientIp } from './rate-limit'
 
 describe('rate limit', () => {
+  afterEach(() => {
+    delete process.env.LISTEN_MEET_TRUST_PROXY_HEADERS
+  })
+
   it('blocks requests after the configured limit until the window resets', () => {
     const limiter = createRateLimiter({
       windowMs: 1000,
@@ -14,7 +18,18 @@ describe('rate limit', () => {
     expect(limiter.check('client', 1001).allowed).toBe(true)
   })
 
-  it('extracts the first forwarded IP address', () => {
+  it('does not trust forwarded IP headers unless proxy trust is explicitly enabled', () => {
+    const request = new Request('https://example.com', {
+      headers: {
+        'x-forwarded-for': '203.0.113.1, 198.51.100.2',
+      },
+    })
+
+    expect(getClientIp(request)).toBe('unknown')
+  })
+
+  it('extracts the first forwarded IP address only behind a trusted proxy', () => {
+    process.env.LISTEN_MEET_TRUST_PROXY_HEADERS = 'true'
     const request = new Request('https://example.com', {
       headers: {
         'x-forwarded-for': '203.0.113.1, 198.51.100.2',
