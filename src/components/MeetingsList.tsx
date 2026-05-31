@@ -22,6 +22,47 @@ interface MeetingsListProps {
 
 type DateFilter = 'all' | 'today' | 'week' | 'month'
 
+function parsePercentage(value?: string): number | null {
+  if (!value) return null
+
+  const match = value.match(/(\d+(?:[.,]\d+)?)\s*%/)
+  if (!match) return null
+
+  return Number(match[1].replace(',', '.'))
+}
+
+function getSearchableMeetingText(meeting: MeetingRecord): string {
+  const { summary } = meeting
+  const values = [
+    summary.title,
+    summary.overview,
+    summary.summary,
+    ...summary.keyPoints,
+    ...summary.actionItems,
+    ...summary.participants,
+    ...summary.topics,
+    summary.metrics?.efficiency,
+    summary.metrics?.engagement,
+    summary.metrics?.decisionsCount?.toString(),
+    summary.tags?.meetingType,
+    summary.tags?.priority,
+    summary.tags?.status,
+    summary.insights?.sentiment,
+    summary.insights?.engagement,
+    summary.insights?.outcome,
+    summary.transcript,
+    ...(summary.timeline?.flatMap((item) => [item.phase, item.description, item.time]) ?? []),
+    ...(summary.participationAnalysis?.flatMap((participant) => [
+      participant.participant,
+      participant.talkTime,
+      participant.contributions,
+      participant.role,
+    ]) ?? []),
+  ]
+
+  return values.filter(Boolean).join(' ').toLowerCase()
+}
+
 export function MeetingsList({ onNewRecording, locale = 'pt-BR' }: MeetingsListProps) {
   const t = getMessages(locale)
   const [meetings, setMeetings] = useState<MeetingRecord[]>([])
@@ -40,9 +81,7 @@ export function MeetingsList({ onNewRecording, locale = 'pt-BR' }: MeetingsListP
 
   const filteredMeetings = useMemo(() => meetings.filter((meeting) => {
     const query = searchTerm.toLowerCase()
-    const matchesSearch = meeting.summary.title.toLowerCase().includes(query) ||
-      meeting.summary.overview.toLowerCase().includes(query) ||
-      meeting.summary.participants.some((participant) => participant.toLowerCase().includes(query))
+    const matchesSearch = getSearchableMeetingText(meeting).includes(query)
 
     if (!matchesSearch) return false
 
@@ -102,6 +141,14 @@ export function MeetingsList({ onNewRecording, locale = 'pt-BR' }: MeetingsListP
   }
 
   const totalMinutes = Math.floor(meetings.reduce((acc, meeting) => acc + meeting.duration, 0) / 60)
+  const totalDecisions = meetings.reduce((acc, meeting) => acc + (meeting.summary.metrics?.decisionsCount ?? 0), 0)
+  const totalActions = meetings.reduce((acc, meeting) => acc + meeting.summary.actionItems.length, 0)
+  const efficiencyValues = meetings
+    .map((meeting) => parsePercentage(meeting.summary.metrics?.efficiency))
+    .filter((value): value is number => value !== null)
+  const averageEfficiency = efficiencyValues.length > 0
+    ? `${Math.round(efficiencyValues.reduce((acc, value) => acc + value, 0) / efficiencyValues.length)}%`
+    : null
   const weekMeetings = meetings.filter((meeting) => {
     const weekAgo = new Date(referenceDate.getTime() - 7 * 24 * 60 * 60 * 1000)
     return new Date(meeting.date) >= weekAgo
@@ -166,7 +213,7 @@ export function MeetingsList({ onNewRecording, locale = 'pt-BR' }: MeetingsListP
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-card)] p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-[var(--studio-subtle)]">{t.history.sessions}</p>
           <p className="mt-2 font-mono text-2xl font-semibold text-[var(--studio-text)]">
@@ -180,6 +227,17 @@ export function MeetingsList({ onNewRecording, locale = 'pt-BR' }: MeetingsListP
         <div className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-card)] p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-[var(--studio-subtle)]">{t.history.thisWeek}</p>
           <p className="mt-2 font-mono text-2xl font-semibold text-[var(--studio-text)]">{weekMeetings}</p>
+        </div>
+        <div className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-card)] p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--studio-subtle)]">{t.history.decisions}</p>
+          <p className="mt-2 font-mono text-2xl font-semibold text-[var(--studio-text)]">{t.history.decisionCount(totalDecisions)}</p>
+        </div>
+        <div className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-card)] p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--studio-subtle)]">{t.history.actions}</p>
+          <p className="mt-2 font-mono text-2xl font-semibold text-[var(--studio-text)]">{t.history.actionCount(totalActions)}</p>
+          {averageEfficiency && (
+            <p className="mt-1 text-xs text-[var(--studio-subtle)]">{t.history.averageEfficiency(averageEfficiency)}</p>
+          )}
         </div>
       </section>
 
@@ -347,6 +405,122 @@ export function MeetingsList({ onNewRecording, locale = 'pt-BR' }: MeetingsListP
                       <p className="text-xs text-[var(--studio-subtle)]">{t.history.decisions}</p>
                       <p className="mt-1 font-medium text-[var(--studio-text)]">{selectedMeeting.summary.metrics.decisionsCount}</p>
                     </div>
+                  </div>
+                </section>
+              )}
+
+              {selectedMeeting.summary.overview && selectedMeeting.summary.overview !== selectedMeeting.summary.summary && (
+                <section className="border-t border-[color:var(--studio-border)] pt-5">
+                  <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--studio-text)]">
+                    <MaterialIcon name="article" className="text-base text-[var(--studio-secondary)]" />
+                    {t.history.overview}
+                  </h4>
+                  <p className="text-sm leading-6 text-[var(--studio-muted)]">{selectedMeeting.summary.overview}</p>
+                </section>
+              )}
+
+              {selectedMeeting.summary.timeline && selectedMeeting.summary.timeline.length > 0 && (
+                <section className="border-t border-[color:var(--studio-border)] pt-5">
+                  <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--studio-text)]">
+                    <MaterialIcon name="timeline" className="text-base text-[var(--studio-primary)]" />
+                    {t.history.timeline}
+                  </h4>
+                  <ol className="space-y-3">
+                    {selectedMeeting.summary.timeline.map((item) => (
+                      <li key={`${item.phase}-${item.time}`} className="grid gap-3 rounded-md bg-[var(--studio-panel)] p-3 sm:grid-cols-[92px_minmax(0,1fr)]">
+                        <time className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--studio-primary)]">{item.time}</time>
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--studio-text)]">{item.phase}</p>
+                          <p className="mt-1 text-sm leading-5 text-[var(--studio-muted)]">{item.description}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )}
+
+              {selectedMeeting.summary.tags && (
+                <section className="border-t border-[color:var(--studio-border)] pt-5">
+                  <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--studio-text)]">
+                    <MaterialIcon name="category" className="text-base text-[#b8a7ff]" />
+                    {t.history.categories}
+                  </h4>
+                  <dl className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-md bg-[var(--studio-panel)] p-3">
+                      <dt className="text-xs text-[var(--studio-subtle)]">{t.history.meetingType}</dt>
+                      <dd className="mt-1 text-sm font-medium text-[var(--studio-text)]">{selectedMeeting.summary.tags.meetingType}</dd>
+                    </div>
+                    <div className="rounded-md bg-[var(--studio-panel)] p-3">
+                      <dt className="text-xs text-[var(--studio-subtle)]">{t.history.priority}</dt>
+                      <dd className="mt-1 text-sm font-medium text-[var(--studio-text)]">{selectedMeeting.summary.tags.priority}</dd>
+                    </div>
+                    <div className="rounded-md bg-[var(--studio-panel)] p-3">
+                      <dt className="text-xs text-[var(--studio-subtle)]">{t.history.status}</dt>
+                      <dd className="mt-1 text-sm font-medium text-[var(--studio-text)]">{selectedMeeting.summary.tags.status}</dd>
+                    </div>
+                  </dl>
+                </section>
+              )}
+
+              {selectedMeeting.summary.insights && (
+                <section className="border-t border-[color:var(--studio-border)] pt-5">
+                  <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--studio-text)]">
+                    <MaterialIcon name="psychology" className="text-base text-[var(--studio-secondary)]" />
+                    {t.history.aiInsights}
+                  </h4>
+                  <dl className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-md bg-[var(--studio-panel)] p-3">
+                      <dt className="text-xs text-[var(--studio-subtle)]">{t.history.sentiment}</dt>
+                      <dd className="mt-1 text-sm font-medium text-[var(--studio-text)]">{selectedMeeting.summary.insights.sentiment}</dd>
+                    </div>
+                    <div className="rounded-md bg-[var(--studio-panel)] p-3">
+                      <dt className="text-xs text-[var(--studio-subtle)]">{t.history.engagement}</dt>
+                      <dd className="mt-1 text-sm font-medium text-[var(--studio-text)]">{selectedMeeting.summary.insights.engagement}</dd>
+                    </div>
+                    <div className="rounded-md bg-[var(--studio-panel)] p-3">
+                      <dt className="text-xs text-[var(--studio-subtle)]">{t.history.outcome}</dt>
+                      <dd className="mt-1 text-sm font-medium text-[var(--studio-text)]">{selectedMeeting.summary.insights.outcome}</dd>
+                    </div>
+                  </dl>
+                </section>
+              )}
+
+              {selectedMeeting.summary.participationAnalysis && selectedMeeting.summary.participationAnalysis.length > 0 && (
+                <section className="border-t border-[color:var(--studio-border)] pt-5">
+                  <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--studio-text)]">
+                    <MaterialIcon name="groups" className="text-base text-[var(--studio-primary)]" />
+                    {t.history.participationAnalysis}
+                  </h4>
+                  <div className="grid gap-3">
+                    {selectedMeeting.summary.participationAnalysis.map((participant) => (
+                      <article key={participant.participant} className="rounded-md bg-[var(--studio-panel)] p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-[var(--studio-text)]">{participant.participant}</p>
+                            <p className="mt-1 text-xs text-[var(--studio-subtle)]">{participant.role}</p>
+                          </div>
+                          <Badge variant="outline" className="border-[color:var(--studio-secondary-border)] bg-[var(--studio-secondary-soft)] text-[var(--studio-text)]">
+                            {participant.talkTime}
+                          </Badge>
+                        </div>
+                        <p className="mt-3 text-sm leading-5 text-[var(--studio-muted)]">
+                          <span className="font-medium text-[var(--studio-text)]">{t.history.contributions}: </span>
+                          {participant.contributions}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {selectedMeeting.summary.transcript && (
+                <section className="border-t border-[color:var(--studio-border)] pt-5">
+                  <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--studio-text)]">
+                    <MaterialIcon name="subtitles" className="text-base text-[var(--studio-secondary)]" />
+                    {t.history.completeTranscript}
+                  </h4>
+                  <div className="max-h-64 overflow-auto rounded-md bg-[var(--studio-panel)] p-4 text-sm leading-6 text-[var(--studio-muted)]">
+                    {selectedMeeting.summary.transcript}
                   </div>
                 </section>
               )}

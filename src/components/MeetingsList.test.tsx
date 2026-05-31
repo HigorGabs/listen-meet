@@ -35,6 +35,50 @@ const meeting = {
   },
 }
 
+const richMeeting = {
+  ...meeting,
+  id: 'meeting-rich',
+  summary: {
+    ...meeting.summary,
+    metrics: {
+      efficiency: '82%',
+      engagement: 'Alto',
+      decisionsCount: 4,
+    },
+    timeline: [
+      {
+        phase: 'Abertura',
+        description: 'Contexto do problema e alinhamento inicial.',
+        time: '0-5min',
+      },
+      {
+        phase: 'Decisões',
+        description: 'Definição dos próximos passos.',
+        time: '20-25min',
+      },
+    ],
+    tags: {
+      meetingType: 'Planejamento',
+      priority: 'Alta',
+      status: 'Concluída',
+    },
+    insights: {
+      sentiment: 'Produtiva',
+      engagement: 'Colaborativo',
+      outcome: 'Decisões claras',
+    },
+    participationAnalysis: [
+      {
+        participant: 'Higor',
+        talkTime: '55%',
+        contributions: 'Priorizou o backlog',
+        role: 'Facilitador',
+      },
+    ],
+    transcript: 'Transcrição completa com decisões e próximos passos.',
+  },
+}
+
 describe('MeetingsList', () => {
   beforeEach(() => {
     mockMeetingStorage.getAllMeetings.mockReturnValue([])
@@ -71,5 +115,25 @@ describe('MeetingsList', () => {
 
     expect(screen.getByText('Priorizar onboarding')).toBeInTheDocument()
     expect(screen.getByText('Higor revisar backlog')).toBeInTheDocument()
+  })
+
+  it('renders the rich meeting insights saved by the audio processor', () => {
+    mockMeetingStorage.getAllMeetings.mockReturnValue([richMeeting])
+
+    render(<MeetingsList onNewRecording={vi.fn()} />)
+
+    expect(screen.getByText('4 decisões')).toBeInTheDocument()
+    expect(screen.getByText('1 ação')).toBeInTheDocument()
+    expect(screen.getByText('Timeline da reunião')).toBeInTheDocument()
+    expect(screen.getByText('Abertura')).toBeInTheDocument()
+    expect(screen.getByText('Contexto do problema e alinhamento inicial.')).toBeInTheDocument()
+    expect(screen.getByText('Categorias')).toBeInTheDocument()
+    expect(screen.getByText('Planejamento')).toBeInTheDocument()
+    expect(screen.getByText('Insights da IA')).toBeInTheDocument()
+    expect(screen.getByText('Produtiva')).toBeInTheDocument()
+    expect(screen.getByText('Análise de participação')).toBeInTheDocument()
+    expect(screen.getByText('Priorizou o backlog')).toBeInTheDocument()
+    expect(screen.getByText('Transcrição completa')).toBeInTheDocument()
+    expect(screen.getByText('Transcrição completa com decisões e próximos passos.')).toBeInTheDocument()
   })
 })
