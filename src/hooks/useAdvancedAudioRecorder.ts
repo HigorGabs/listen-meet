@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { validateAudioFile } from '@/lib/audio-constraints'
 
 export interface AudioDevice {
   deviceId: string
@@ -37,7 +38,7 @@ export interface UseAdvancedAudioRecorderReturn {
   // Audio monitoring
   audioLevel: number
   isMonitoring: boolean
-  startMonitoring: () => Promise<void>
+  startMonitoring: () => Promise<boolean>
   stopMonitoring: () => void
   
   // File upload
@@ -72,7 +73,19 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
   const chunksRef = useRef<Blob[]>([])
   const startTimeRef = useRef<number>(0)
   const pausedTimeRef = useRef<number>(0)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastAudioLevelUpdateRef = useRef(0)
+
+  const clearDurationTimer = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+  }, [])
+
+  const stopStreamTracks = useCallback((stream: MediaStream | null) => {
+    stream?.getTracks().forEach((track) => track.stop())
+  }, [])
 
   // Load available audio devices
   const refreshDevices = useCallback(async () => {
@@ -114,34 +127,39 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
     setError(null)
   }, [])
 
-  // Audio level monitoring
-  const analyzeAudio = useCallback(() => {
-    console.log('analyzeAudio chamado, isMonitoring:', isMonitoring, 'analyser:', !!analyserRef.current)
-    if (!analyserRef.current) return
-
-    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount)
-    analyserRef.current.getByteFrequencyData(dataArray)
-
-    // Calculate RMS (Root Mean Square) for audio level
-    let sum = 0
-    for (let i = 0; i < dataArray.length; i++) {
-      sum += dataArray[i] * dataArray[i]
+  const startAudioLevelLoop = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
     }
-    const rms = Math.sqrt(sum / dataArray.length)
-    
-    // Normalize to 0-100 scale
-    const level = Math.min(100, (rms / 255) * 100 * 2) // Amplify for better visibility
-    console.log('Nível detectado:', level)
-    setAudioLevel(level)
 
-    if (isMonitoring) {
-      animationFrameRef.current = requestAnimationFrame(analyzeAudio)
+    const updateLevel = () => {
+      if (!analyserRef.current) return
+
+      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount)
+      analyserRef.current.getByteFrequencyData(dataArray)
+
+      let sum = 0
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i] * dataArray[i]
+      }
+
+      const rms = Math.sqrt(sum / dataArray.length)
+      const level = Math.min(100, (rms / 255) * 100 * 2)
+      const now = performance.now()
+      if (now - lastAudioLevelUpdateRef.current >= 66) {
+        lastAudioLevelUpdateRef.current = now
+        setAudioLevel(level)
+      }
+
+      animationFrameRef.current = requestAnimationFrame(updateLevel)
     }
-  }, [isMonitoring])
 
-  const startMonitoring = useCallback(async () => {
+    updateLevel()
+  }, [])
+
+  const startMonitoring = useCallback(async (): Promise<boolean> => {
     try {
-      console.log('Hook: startMonitoring chamado')
       setError(null)
       
       const constraints: MediaStreamConstraints = {
@@ -175,36 +193,16 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
       source.connect(analyser)
       analyserRef.current = analyser
 
-      console.log('Hook: Monitoramento iniciado com sucesso')
       setIsMonitoring(true)
-      
-      // Start the audio analysis loop
-      const startAnalyzing = () => {
-        if (!analyserRef.current) return
-        
-        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount)
-        analyserRef.current.getByteFrequencyData(dataArray)
-        
-        let sum = 0
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i] * dataArray[i]
-        }
-        const rms = Math.sqrt(sum / dataArray.length)
-        const level = Math.min(100, (rms / 255) * 100 * 2)
-        
-        console.log('Nível detectado:', level)
-        setAudioLevel(level)
-        
-        animationFrameRef.current = requestAnimationFrame(startAnalyzing)
-      }
-      
-      startAnalyzing()
+      startAudioLevelLoop()
+      return true
 
     } catch (err) {
       console.error('Error starting audio monitoring:', err)
       setError('Não foi possível iniciar monitoramento de áudio. Verifique as permissões.')
+      return false
     }
-  }, [selectedDeviceId])
+  }, [selectedDeviceId, startAudioLevelLoop])
 
   const stopMonitoring = useCallback(() => {
     setIsMonitoring(false)
@@ -215,7 +213,7 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
     }
 
     if (monitorStreamRef.current) {
-      monitorStreamRef.current.getTracks().forEach(track => track.stop())
+      stopStreamTracks(monitorStreamRef.current)
       monitorStreamRef.current = null
     }
 
@@ -226,7 +224,7 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
 
     analyserRef.current = null
     setAudioLevel(0)
-  }, [])
+  }, [stopStreamTracks])
 
 
 
@@ -234,21 +232,30 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      clearDurationTimer()
+      if (mediaRecorderRef.current) {
+        try {
+          mediaRecorderRef.current.stop()
+        } catch {
+          // Recorder may already be inactive in some browsers.
+        }
+        mediaRecorderRef.current = null
+      }
+      stopStreamTracks(streamRef.current)
+      streamRef.current = null
       stopMonitoring()
     }
-  }, [stopMonitoring])
+  }, [clearDurationTimer, stopMonitoring, stopStreamTracks])
 
   const startRecording = useCallback(async () => {
-    console.log('Hook: startRecording chamado')
     try {
       setError(null)
       setRecordingData(null)
-      
-      console.log('Hook: Iniciando monitoramento para gravação...')
-      // Start monitoring during recording
-      await startMonitoring()
-      
-      console.log('Hook: Configurando constraints para:', selectedDeviceId)
+
+      if (isMonitoring) {
+        stopMonitoring()
+      }
+
       const constraints: MediaStreamConstraints = {
         audio: selectedDeviceId === 'default' ? {
           echoCancellation: true,
@@ -264,9 +271,7 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
         }
       }
 
-      console.log('Hook: Solicitando getUserMedia...')
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      console.log('Hook: Stream obtido:', stream)
       streamRef.current = stream
       chunksRef.current = []
 
@@ -284,7 +289,7 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
       analyserRef.current = analyser
 
       setIsMonitoring(true)
-      analyzeAudio()
+      startAudioLevelLoop()
 
       // Try different codecs based on browser support
       let mimeType = 'audio/webm;codecs=opus'
@@ -308,14 +313,12 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
       }
 
       mediaRecorder.onstop = () => {
-        console.log('Hook: MediaRecorder parado, processando dados...')
         const blob = new Blob(chunksRef.current, { 
           type: mimeType || 'audio/webm' 
         })
         // Calculate final duration based on actual recording time
         const finalDuration = startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : duration
         
-        console.log('Hook: Criando recordingData:', { size: blob.size, duration: finalDuration })
         setRecordingData({
           blob,
           duration: finalDuration,
@@ -325,7 +328,7 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
 
         // Cleanup
         if (streamRef.current) {
-          streamRef.current.getTracks().forEach((track) => track.stop())
+          stopStreamTracks(streamRef.current)
           streamRef.current = null
         }
         
@@ -336,20 +339,21 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
       mediaRecorder.start(1000) // Collect data every second
       
       startTimeRef.current = Date.now()
-      console.log('Hook: Configurando estados...')
       setIsRecording(true)
       setIsPaused(false)
       setDuration(0)
 
       // Start duration timer
       intervalRef.current = setInterval(updateDuration, 1000)
-      console.log('Hook: Gravação iniciada com sucesso!')
 
     } catch (err) {
       console.error('Error starting recording:', err)
+      stopMonitoring()
+      stopStreamTracks(streamRef.current)
+      streamRef.current = null
       setError('Não foi possível iniciar a gravação. Verifique as permissões do microfone.')
     }
-  }, [selectedDeviceId, duration, updateDuration, stopMonitoring, startMonitoring, analyzeAudio])
+  }, [selectedDeviceId, duration, updateDuration, stopMonitoring, isMonitoring, startAudioLevelLoop, stopStreamTracks])
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
@@ -357,12 +361,9 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
       setIsRecording(false)
       setIsPaused(false)
 
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
+      clearDurationTimer()
     }
-  }, [isRecording])
+  }, [clearDurationTimer, isRecording])
 
   const pauseRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording && !isPaused) {
@@ -372,12 +373,9 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
       // Mark pause start time
       pausedTimeRef.current = Date.now()
       
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
+      clearDurationTimer()
     }
-  }, [isRecording, isPaused])
+  }, [clearDurationTimer, isRecording, isPaused])
 
   const resumeRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording && isPaused) {
@@ -398,24 +396,9 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
       setError(null)
       setRecordingData(null)
 
-      // Validate file type
-      const validAudioTypes = [
-        'audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/wave', 'audio/x-wav',
-        'audio/webm', 'audio/ogg', 'audio/aac', 'audio/m4a', 'audio/mp4',
-        'audio/flac', 'audio/x-flac', 'audio/3gpp', 'audio/amr'
-      ]
-
-      const isValidAudio = validAudioTypes.some(type => file.type.startsWith(type.split('/')[0])) || 
-                          file.name.match(/\.(mp3|wav|webm|ogg|aac|m4a|mp4|flac|3gp|amr)$/i)
-
-      if (!isValidAudio) {
-        setError('Formato de arquivo não suportado. Use MP3, WAV, WEBM, OGG, AAC, M4A, FLAC, etc.')
-        return
-      }
-
-      // Check file size (max 100MB)
-      if (file.size > 100 * 1024 * 1024) {
-        setError('Arquivo muito grande. Tamanho máximo: 100MB')
+      const validation = validateAudioFile(file)
+      if (!validation.valid) {
+        setError(validation.message || 'Arquivo de áudio inválido.')
         return
       }
 

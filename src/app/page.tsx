@@ -1,120 +1,373 @@
 'use client'
 
-import { AdvancedAudioRecorder } from '@/components/AdvancedAudioRecorder'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { AdvancedAudioRecorder, type AudioCaptureReadiness } from '@/components/AdvancedAudioRecorder'
 import { MeetingsList } from '@/components/MeetingsList'
+import { SessionReadinessPanel } from '@/components/SessionReadinessPanel'
+import { StudioCommandRail } from '@/components/StudioCommandRail'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Mic, History, Settings, AlertCircle, CheckCircle, Key, Download, Loader2 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { MaterialIcon } from '@/components/ui/material-icon'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { MeetingRecord, MeetingStorage } from '@/utils/storage'
+import { MAX_AUDIO_UPLOAD_MB } from '@/lib/audio-constraints'
+import {
+  AI_PROVIDERS,
+  type AiModelOption,
+  type AiProviderId,
+} from '@/lib/ai-providers'
+import {
+  LOCALE_STORAGE_KEY,
+  getMessages,
+  normalizeLocale,
+  type Locale,
+} from '@/lib/i18n'
+import {
+  STUDIO_THEME_STORAGE_KEY,
+  normalizeStudioTheme,
+  type StudioThemeId,
+} from '@/lib/studio-theme'
+
+const SESSION_CONFIG_KEY = 'listen-meet-ai-config'
+
+interface SessionAiConfig {
+  provider: AiProviderId
+  model: string
+  apiSource?: ApiSource
+  apiKey?: string
+}
+
+type ApiKeyMode = 'server' | 'session'
+type ApiSource = ApiKeyMode | null
+
+function readSessionConfig(): SessionAiConfig | null {
+  try {
+    const stored = sessionStorage.getItem(SESSION_CONFIG_KEY)
+    return stored ? JSON.parse(stored) : null
+  } catch {
+    return null
+  }
+}
+
+function providerLabel(providerId: AiProviderId): string {
+  return AI_PROVIDERS.find((provider) => provider.id === providerId)?.name || providerId
+}
 
 export default function Home() {
+  const [theme, setTheme] = useState<StudioThemeId>('dark')
+  const [locale, setLocale] = useState<Locale>('pt-BR')
+  const [isPreferencesHydrated, setIsPreferencesHydrated] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingStatus, setProcessingStatus] = useState('')
-  const [geminiApiKey, setGeminiApiKey] = useState('')
+  const [provider, setProvider] = useState<AiProviderId>('gemini')
+  const [apiKey, setApiKey] = useState('')
+  const [apiKeyMode, setApiKeyMode] = useState<ApiKeyMode>('server')
+  const [apiSource, setApiSource] = useState<ApiSource>(null)
+  const [models, setModels] = useState<AiModelOption[]>([])
+  const [selectedModel, setSelectedModel] = useState('')
+  const [isLoadingModels, setIsLoadingModels] = useState(false)
+  const [modelError, setModelError] = useState('')
+  const [serverProviders, setServerProviders] = useState<Record<AiProviderId, boolean>>({
+    gemini: false,
+    openrouter: false,
+    openai: false,
+    anthropic: false,
+  })
   const [isConfigured, setIsConfigured] = useState(false)
+  const [isCheckingConfig, setIsCheckingConfig] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
   const [activeTab, setActiveTab] = useState('record')
   const [lastProcessedMeeting, setLastProcessedMeeting] = useState<MeetingRecord | null>(null)
   const [showProcessedMessage, setShowProcessedMessage] = useState(false)
-  const [processedIds, setProcessedIds] = useState<Set<string>>(new Set())
+  const [captureReadiness, setCaptureReadiness] = useState<AudioCaptureReadiness>({
+    hasAudioDevice: false,
+    hasAudioSignal: false,
+    hasCaptureError: false,
+  })
+
+  const selectedProvider = AI_PROVIDERS.find((item) => item.id === provider) || AI_PROVIDERS[0]
+  const t = getMessages(locale)
+  const selectedModelName = models.find((model) => model.id === selectedModel)?.name || selectedModel
+  const hasServerKey = serverProviders[provider]
+  const hasSessionKey = Boolean(apiKey.trim())
+  const selectedSourceHasKey = apiKeyMode === 'server' ? hasServerKey : hasSessionKey
+  const canListModels = selectedSourceHasKey || !selectedProvider.requiresApiKeyForModels
+  const apiKeySourceLabel = apiSource === 'session'
+    ? t.settings.apiSourceSession
+    : t.settings.apiSourceServer
+  const modelErrorTitleRef = useRef(t.settings.modelErrorTitle)
 
   useEffect(() => {
-    // Check if API key is stored in localStorage
-    const storedKey = localStorage.getItem('gemini-api-key')
-    if (storedKey) {
-      setGeminiApiKey(storedKey)
-      setIsConfigured(true)
-    } else {
-      setShowSettings(true)
+    modelErrorTitleRef.current = t.settings.modelErrorTitle
+  }, [t.settings.modelErrorTitle])
+
+  useEffect(() => {
+    document.title = t.brand.pageTitle
+  }, [t.brand.pageTitle])
+
+  useEffect(() => {
+    setTheme(normalizeStudioTheme(localStorage.getItem(STUDIO_THEME_STORAGE_KEY)))
+    setLocale(normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY)))
+    localStorage.removeItem('listen-meet-palette')
+    document.documentElement.style.removeProperty('--studio-primary')
+    document.documentElement.style.removeProperty('--studio-secondary')
+    setIsPreferencesHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isPreferencesHydrated) return
+
+    const root = document.documentElement
+    root.dataset.theme = theme
+    root.lang = locale
+    root.style.removeProperty('--studio-primary')
+    root.style.removeProperty('--studio-secondary')
+
+    localStorage.setItem(STUDIO_THEME_STORAGE_KEY, theme)
+    localStorage.setItem(LOCALE_STORAGE_KEY, locale)
+    localStorage.removeItem('listen-meet-palette')
+  }, [isPreferencesHydrated, locale, theme])
+
+  const loadModelsForProvider = useCallback(async (
+    nextProvider: AiProviderId,
+    nextApiKey: string,
+    preferredModel?: string
+  ) => {
+    setIsLoadingModels(true)
+    setModelError('')
+
+    try {
+      const response = await fetch('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: nextProvider,
+          apiKey: nextApiKey || undefined,
+        }),
+      })
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || modelErrorTitleRef.current)
+      }
+
+      const nextModels = result.models as AiModelOption[]
+      setModels(nextModels)
+
+      const preferred =
+        nextModels.find((model) => model.id === preferredModel) ||
+        nextModels.find((model) => model.id === result.defaultModel) ||
+        nextModels.find((model) => model.recommended) ||
+        nextModels[0]
+
+      setSelectedModel(preferred?.id || '')
+      return {
+        models: nextModels,
+        selectedModel: preferred?.id || '',
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : modelErrorTitleRef.current
+      setModels([])
+      setSelectedModel('')
+      setModelError(message)
+      return {
+        models: [],
+        selectedModel: '',
+      }
+    } finally {
+      setIsLoadingModels(false)
     }
   }, [])
 
-  const saveApiKey = () => {
-    if (geminiApiKey.trim()) {
-      localStorage.setItem('gemini-api-key', geminiApiKey.trim())
-      setIsConfigured(true)
-      setShowSettings(false)
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadConfiguration() {
+      localStorage.removeItem('gemini-api-key')
+      sessionStorage.removeItem('gemini-api-key-session')
+
+      const sessionConfig = readSessionConfig()
+
+      try {
+        const response = await fetch('/api/models')
+        const result = await response.json()
+
+        if (!isMounted) return
+
+        const configuredProviders = Object.fromEntries(
+          AI_PROVIDERS.map((item) => [
+            item.id,
+            Boolean(result.providers?.find((provider: { id: AiProviderId; configured: boolean }) =>
+              provider.id === item.id
+            )?.configured),
+          ])
+        ) as Record<AiProviderId, boolean>
+
+        setServerProviders(configuredProviders)
+
+        const initialProvider =
+          sessionConfig?.provider ||
+          AI_PROVIDERS.find((item) => configuredProviders[item.id])?.id ||
+          'gemini'
+        const savedConfigBelongsToProvider = sessionConfig?.provider === initialProvider
+        const initialApiKey = ''
+        const initialApiKeyMode: ApiKeyMode = savedConfigBelongsToProvider && (
+          sessionConfig.apiSource === 'session'
+        )
+          ? 'session'
+          : 'server'
+
+        setProvider(initialProvider)
+        setApiKey(initialApiKey)
+        setApiKeyMode(initialApiKeyMode)
+
+        const initialHasServerKey = configuredProviders[initialProvider]
+        const initialHasSessionKey = Boolean(initialApiKey)
+
+        if (initialHasServerKey || initialHasSessionKey) {
+          const loaded = await loadModelsForProvider(
+            initialProvider,
+            initialApiKeyMode === 'session' ? initialApiKey : '',
+            sessionConfig?.model
+          )
+
+          if (loaded.selectedModel) {
+            setApiSource(initialApiKeyMode === 'session' ? 'session' : 'server')
+            setIsConfigured(true)
+            setShowSettings(false)
+            return
+          }
+        }
+
+        setShowSettings(true)
+      } catch {
+        if (isMounted) {
+          setShowSettings(true)
+        }
+      } finally {
+        if (isMounted) {
+          setIsCheckingConfig(false)
+        }
+      }
+    }
+
+    loadConfiguration()
+
+    return () => {
+      isMounted = false
+    }
+  }, [loadModelsForProvider])
+
+  const handleProviderChange = (nextProvider: AiProviderId) => {
+    setProvider(nextProvider)
+    setApiKey('')
+    setApiKeyMode(serverProviders[nextProvider] ? 'server' : 'session')
+    setApiSource(null)
+    setModels([])
+    setSelectedModel('')
+    setModelError('')
+
+    const nextProviderConfig = AI_PROVIDERS.find((item) => item.id === nextProvider)
+    if (serverProviders[nextProvider] || !nextProviderConfig?.requiresApiKeyForModels) {
+      void loadModelsForProvider(nextProvider, '')
     }
   }
 
-  const testApiKey = async () => {
-    if (!geminiApiKey.trim()) return
-    
-    try {
-      const response = await fetch('/api/test-gemini', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: geminiApiKey })
-      })
-      
-      if (response.ok) {
-        alert('✅ API Key válida! Configuração salva.')
-        saveApiKey()
-      } else {
-        alert('❌ API Key inválida. Verifique e tente novamente.')
-      }
-    } catch {
-      alert('❌ Erro ao testar API Key. Verifique sua conexão.')
+  const handleApiKeyModeChange = (nextMode: ApiKeyMode) => {
+    setApiKeyMode(nextMode)
+    setApiSource(null)
+    setModels([])
+    setSelectedModel('')
+    setModelError('')
+
+    if (nextMode === 'server' && serverProviders[provider]) {
+      void loadModelsForProvider(provider, '')
     }
+  }
+
+  const loadModelsFromSettings = async () => {
+    if (!canListModels) {
+      setModelError(t.errors.listModelsKey(providerLabel(provider)))
+      return
+    }
+
+    await loadModelsForProvider(
+      provider,
+      apiKeyMode === 'session' ? apiKey.trim() : '',
+      selectedModel
+    )
+  }
+
+  const saveAiSettings = () => {
+    if (!selectedModel) {
+      setModelError(t.errors.selectModel)
+      return
+    }
+
+    if (!selectedSourceHasKey) {
+      setModelError(
+        apiKeyMode === 'server'
+          ? t.errors.missingServerKey(selectedProvider.serverEnvVar)
+          : t.errors.missingProviderKey(providerLabel(provider))
+      )
+      return
+    }
+
+    const sessionConfig: SessionAiConfig = {
+      provider,
+      model: selectedModel,
+      apiSource: apiKeyMode,
+    }
+
+    sessionStorage.setItem(SESSION_CONFIG_KEY, JSON.stringify(sessionConfig))
+    setApiSource(apiKeyMode)
+    setIsConfigured(true)
+    setShowSettings(false)
   }
 
   const handleRecordingComplete = async (data: { blob: Blob; duration: number; filename?: string; source: 'recording' | 'upload' }) => {
-    // Create unique ID for this recording
-    const recordingId = `${data.blob.size}-${data.duration}-${Date.now()}`
-    
-    // Check if already processed
-    if (processedIds.has(recordingId)) {
-      console.log('Recording already processed, skipping...')
-      return
-    }
-    
-    // Add to processed IDs
-    setProcessedIds(prev => new Set(prev).add(recordingId))
-
-    if (!isConfigured) {
-      alert('Por favor, configure sua API Key do Gemini primeiro.')
+    if (!isConfigured || !selectedModel) {
+      alert(t.errors.configureProvider)
       setShowSettings(true)
       return
     }
 
     setIsProcessing(true)
-    setProcessingStatus('Enviando áudio para processamento...')
-    
+    setProcessingStatus(t.errors.sendingAudio)
+
     try {
-      // Create FormData to send audio file
       const formData = new FormData()
       formData.append('audio', data.blob, data.filename || 'recording.webm')
-      formData.append('apiKey', geminiApiKey)
+      formData.append('provider', provider)
+      formData.append('model', selectedModel)
+      if (apiSource === 'session' && apiKey.trim()) {
+        formData.append('apiKey', apiKey.trim())
+      }
+      formData.append('locale', locale)
       formData.append('duration', data.duration.toString())
 
-      setProcessingStatus('Analisando áudio com Gemini AI...')
+      setProcessingStatus(t.errors.analyzingAudio(providerLabel(provider)))
 
-      // Process with Gemini
       const response = await fetch('/api/process-audio', {
         method: 'POST',
         body: formData
       })
 
+      const result = await response.json().catch(() => null)
       if (!response.ok) {
-        throw new Error('Falha ao processar áudio')
+        throw new Error(result?.error || t.errors.processFailure)
       }
 
-      const result = await response.json()
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Erro desconhecido')
+      if (!result?.success) {
+        throw new Error(result.error || t.errors.unknown)
       }
 
-      setProcessingStatus('Salvando reunião...')
+      setProcessingStatus(t.errors.savingMeeting)
 
-      // Create meeting record
       const meetingRecord: MeetingRecord = {
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         title: result.summary.title,
         date: new Date().toISOString(),
         duration: data.duration,
@@ -122,349 +375,326 @@ export default function Home() {
         filename: result.filename || `reuniao-${new Date().toISOString().split('T')[0]}.txt`
       }
 
-      // Save to localStorage
       MeetingStorage.saveMeeting(meetingRecord)
-      
+
       setLastProcessedMeeting(meetingRecord)
       setShowProcessedMessage(true)
       setActiveTab('history')
-      
-      // Auto-hide message after 10 seconds
+
       setTimeout(() => {
         setShowProcessedMessage(false)
       }, 10000)
-      
-      // Removed auto-download functionality
-      /*
-      // Auto-download txt file
-      const downloadContent = `RESUMO DA REUNIÃO - ${result.summary.title}
-Data: ${new Date().toLocaleDateString('pt-BR')}
-Duração: ${Math.floor(data.duration / 60)} minutos
-
-=== RESUMO ===
-${result.summary.summary || result.summary.overview}
-
-=== RESUMO GERAL ===
-${result.summary.overview}
-
-=== 📊 MÉTRICAS DA REUNIÃO ===
-Eficiência: ${result.summary.metrics?.efficiency || 'N/A'}
-Participação: ${result.summary.metrics?.engagement || 'N/A'}
-Decisões tomadas: ${result.summary.metrics?.decisionsCount || 'N/A'}
-
-=== ⏰ TIMELINE DA REUNIÃO ===
-${result.summary.timeline?.map((item: any) => `${item.phase}: ${item.description} (${item.time})`).join('\n') || 'Timeline não disponível'}
-
-=== 🏷️ TAGS/CATEGORIAS ===
-Tipo de reunião: ${result.summary.tags?.meetingType || 'N/A'}
-Prioridade: ${result.summary.tags?.priority || 'N/A'}
-Status: ${result.summary.tags?.status || 'N/A'}
-
-=== 📈 INSIGHTS DA IA ===
-Sentiment: ${result.summary.insights?.sentiment || 'N/A'}
-Engagement: ${result.summary.insights?.engagement || 'N/A'}
-Outcome: ${result.summary.insights?.outcome || 'N/A'}
-
-=== 👥 ANÁLISE DE PARTICIPAÇÃO ===
-${result.summary.participationAnalysis?.map((p: any) => 
-  `${p.participant}: ${p.talkTime} do tempo | ${p.contributions} | Papel: ${p.role}`
-).join('\n') || 'Análise não disponível'}
-
-=== PONTOS PRINCIPAIS ===
-${result.summary.keyPoints.map((point: string, index: number) => `${index + 1}. ${point}`).join('\n')}
-
-=== AÇÕES IDENTIFICADAS ===
-${result.summary.actionItems.map((action: string, index: number) => `${index + 1}. ${action}`).join('\n')}
-
-=== PARTICIPANTES ===
-${result.summary.participants.join(', ')}
-
-=== TÓPICOS ABORDADOS ===
-${result.summary.topics.join(', ')}
-
-=== TRANSCRIÇÃO COMPLETA ===
-${result.summary.transcript || 'Transcrição não disponível'}
-
----
-Gerado automaticamente pelo Listen Meet com Google Gemini AI
-`
-
-      // Trigger download
-      const blob = new Blob([downloadContent], { type: 'text/plain;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = meetingRecord.filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-      */
-      
     } catch (error) {
       console.error('Error processing recording:', error)
-      alert('❌ Erro ao processar gravação: ' + (error as Error).message)
+      alert(t.errors.processingRecording + (error as Error).message)
     } finally {
       setIsProcessing(false)
       setProcessingStatus('')
     }
   }
 
+  if (isCheckingConfig) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--studio-bg)] text-[var(--studio-text)]">
+        <div className="w-full max-w-sm rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-card)] p-6 shadow-2xl shadow-black/20">
+          <div className="flex items-center justify-center gap-3 text-sm text-[var(--studio-muted)]">
+              <MaterialIcon name="progress_activity" className="animate-spin text-base text-[var(--studio-secondary)]" />
+              {t.shell.verifyConfig}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (showSettings) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-              <Key className="h-6 w-6 text-blue-600" />
+      <div className="flex min-h-screen items-start justify-center overflow-y-auto bg-[var(--studio-bg)] px-4 py-6 text-[var(--studio-text)]">
+        <div className="w-full max-w-xl rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-card)] shadow-2xl shadow-black/20">
+          <div className="border-b border-[color:var(--studio-border)] px-6 py-5 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-[color:var(--studio-secondary-border)] bg-[var(--studio-secondary-soft)]">
+              <MaterialIcon name="key" className="text-2xl text-[var(--studio-secondary)]" />
             </div>
-            <CardTitle className="text-2xl">Configurar API Key</CardTitle>
-            <CardDescription>
-              Configure sua API Key do Google Gemini para usar o Listen Meet
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            <h2 className="text-2xl font-semibold text-[var(--studio-text)]">{t.settings.title}</h2>
+            <p className="mt-2 text-sm text-[var(--studio-muted)]">
+              {t.settings.description}
+            </p>
+          </div>
+          <div className="space-y-4 p-6">
             <div className="space-y-2">
-              <Label htmlFor="apikey">Google Gemini API Key</Label>
-              <Input
-                id="apikey"
-                type="password"
-                placeholder="AIzaSy..."
-                value={geminiApiKey}
-                onChange={(e) => setGeminiApiKey(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Obtenha sua chave em: <a href="https://makersuite.google.com/app/apikey" target="_blank" className="text-blue-600 hover:underline">Google AI Studio</a>
+              <Label htmlFor="ai-provider" className="text-[var(--studio-muted)]">{t.settings.provider}</Label>
+              <Select value={provider} onValueChange={(value) => handleProviderChange(value as AiProviderId)}>
+                <SelectTrigger id="ai-provider" className="w-full border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)]">
+                  <SelectValue placeholder={t.settings.providerPlaceholder} />
+                </SelectTrigger>
+                <SelectContent>
+                  {AI_PROVIDERS.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name}{serverProviders[item.id] ? ` (${t.settings.serverConfigured})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[var(--studio-muted)]">{t.settings.keySource}</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={apiKeyMode === 'server' ? 'default' : 'outline'}
+                  disabled={!serverProviders[provider]}
+                  onClick={() => handleApiKeyModeChange('server')}
+                  className="justify-start"
+                >
+                  <MaterialIcon name="dns" className="text-base" />
+                  {t.settings.server}
+                </Button>
+                <Button
+                  type="button"
+                  variant={apiKeyMode === 'session' ? 'default' : 'outline'}
+                  onClick={() => handleApiKeyModeChange('session')}
+                  className="justify-start"
+                >
+                  <MaterialIcon name="person" className="text-base" />
+                  {t.settings.session}
+                </Button>
+              </div>
+              <p className="text-xs text-[var(--studio-subtle)]">
+                {apiKeyMode === 'server'
+                  ? t.settings.serverHelp(selectedProvider.serverEnvVar)
+                  : t.settings.sessionHelp}
               </p>
             </div>
-            
+
+            {apiKeyMode === 'session' && (
+              <div className="space-y-2">
+                <Label htmlFor="apikey" className="text-[var(--studio-muted)]">{selectedProvider.apiKeyLabel}</Label>
+                <Input
+                  id="apikey"
+                  type="password"
+                  placeholder={t.settings.apiKeyPlaceholder}
+                  value={apiKey}
+                  className="border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] placeholder:text-[var(--studio-subtle)]"
+                  onChange={(event) => {
+                    setApiKey(event.target.value)
+                    setModels([])
+                    setSelectedModel('')
+                    setModelError('')
+                  }}
+                />
+              </div>
+            )}
+
             <div className="flex gap-2">
-              <Button 
-                onClick={testApiKey}
-                disabled={!geminiApiKey.trim()}
-                className="flex-1"
+              <Button
+                onClick={loadModelsFromSettings}
+                disabled={isLoadingModels || !canListModels}
+                className="flex-1 bg-[var(--studio-secondary)] text-zinc-950 hover:opacity-90"
               >
-                Testar e Salvar
+                {isLoadingModels ? (
+                  <>
+                    <MaterialIcon name="progress_activity" className="animate-spin text-base" />
+                    {t.settings.listingModels}
+                  </>
+                ) : (
+                  t.settings.listModels
+                )}
+              </Button>
+            </div>
+
+            {models.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="ai-model" className="text-[var(--studio-muted)]">{t.settings.model}</Label>
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger id="ai-model" className="w-full border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)]">
+                    <SelectValue placeholder={t.settings.modelPlaceholder} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {models.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.name || model.id}{model.recommended ? ` (${t.settings.recommended})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-[var(--studio-subtle)]">
+                  {t.settings.modelCount(models.length, providerLabel(provider), (
+                    apiKeyMode === 'server' && serverProviders[provider]
+                      ? t.settings.sourceServer
+                      : apiKeyMode === 'session' && apiKey.trim()
+                        ? t.settings.sourceSession
+                        : t.settings.sourcePublic
+                  ))}
+                </p>
+              </div>
+            )}
+
+            {!selectedProvider.supportsAudioProcessing && (
+              <Alert className="border-[color:var(--studio-warning-border)] bg-[var(--studio-warning-bg)] text-[var(--studio-warning-text)]">
+                <MaterialIcon name="error" className="text-base" />
+                <AlertTitle>{t.settings.unsupportedTitle}</AlertTitle>
+                <AlertDescription>
+                  {t.settings.unsupportedDescription}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {modelError && (
+              <Alert variant="destructive">
+                <MaterialIcon name="error" className="text-base" />
+                <AlertTitle>{t.settings.modelErrorTitle}</AlertTitle>
+                <AlertDescription>{modelError}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                onClick={saveAiSettings}
+                disabled={!selectedModel || !selectedProvider.supportsAudioProcessing || !selectedSourceHasKey}
+                className="flex-1 bg-[var(--studio-primary)] text-zinc-950 hover:opacity-90"
+              >
+                {t.settings.useConfig}
               </Button>
               {isConfigured && (
-                <Button 
+                <Button
                   variant="outline"
                   onClick={() => setShowSettings(false)}
+                  className="border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] hover:text-[var(--studio-text)]"
                 >
-                  Cancelar
+                  {t.common.cancel}
                 </Button>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Mic className="h-4 w-4 text-white" />
-            </div>
-            <h1 className="text-xl font-bold">Listen Meet</h1>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            {isConfigured ? (
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm text-green-600">API Configurada</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-orange-500" />
-                <span className="text-sm text-orange-600">API não configurada</span>
-              </div>
-            )}
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setShowSettings(true)}
-              className="gap-2"
-            >
-              <Settings className="h-4 w-4" />
-              Configurações
-            </Button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[var(--studio-bg)] text-[var(--studio-text)]">
+      <StudioCommandRail
+        activeTab={activeTab}
+        apiKeySourceLabel={apiKeySourceLabel}
+        isConfigured={isConfigured}
+        locale={locale}
+        modelName={selectedModelName}
+        modelsCount={models.length}
+        onLocaleChange={setLocale}
+        onOpenSettings={() => setShowSettings(true)}
+        onThemeChange={setTheme}
+        onTabChange={(tab) => setActiveTab(tab)}
+        providerName={providerLabel(provider)}
+        theme={theme}
+      />
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">
-        <div className="max-w-6xl mx-auto">
-          
-          {/* API Configuration Alert */}
+      <main className="mx-auto max-w-7xl px-4 py-6">
+        <div className="space-y-6">
+          <section className="flex flex-col gap-4 rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--studio-primary)]">
+                {t.shell.activeStudio}
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--studio-text)]">{t.shell.captureCenter}</h2>
+              <p className="mt-1 max-w-2xl text-sm text-[var(--studio-muted)]">
+                {t.shell.captureDescription}
+              </p>
+            </div>
+            <div className="grid gap-2 text-xs text-[var(--studio-muted)] sm:grid-cols-3">
+              <div className="rounded-md bg-[var(--studio-panel-strong)] px-3 py-2">
+                <span className="block text-[var(--studio-subtle)]">{t.shell.provider}</span>
+                <strong className="font-medium text-[var(--studio-text)]">{providerLabel(provider)}</strong>
+              </div>
+              <div className="rounded-md bg-[var(--studio-panel-strong)] px-3 py-2">
+                <span className="block text-[var(--studio-subtle)]">{t.shell.model}</span>
+                <strong className="font-medium text-[var(--studio-text)]">{selectedModelName || t.common.pending}</strong>
+              </div>
+              <div className="rounded-md bg-[var(--studio-panel-strong)] px-3 py-2">
+                <span className="block text-[var(--studio-subtle)]">{t.shell.status}</span>
+                <strong className="font-medium text-[var(--studio-text)]">{isConfigured ? t.common.ready : t.common.pending}</strong>
+              </div>
+            </div>
+          </section>
+
           {!isConfigured && (
-            <Alert className="mb-6">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Configure sua API Key</AlertTitle>
+            <Alert className="border-[color:var(--studio-warning-border)] bg-[var(--studio-warning-bg)] text-[var(--studio-warning-text)]">
+              <MaterialIcon name="error" className="text-base" />
+              <AlertTitle>{t.shell.configureAiAlertTitle}</AlertTitle>
               <AlertDescription className="mt-2">
-                Para usar o Listen Meet, você precisa configurar sua Google Gemini API Key.
+                {t.shell.configureAiAlertDescription}
                 <div className="mt-3">
                   <Button size="sm" onClick={() => setShowSettings(true)}>
-                    Configurar Agora
+                    {t.common.configureNow}
                   </Button>
                 </div>
               </AlertDescription>
             </Alert>
           )}
 
-          {/* Processing Status */}
           {isProcessing && (
-            <Card className="mb-6 border-blue-200 bg-blue-50">
-              <CardContent className="py-3 px-4">
+            <div role="status" aria-live="polite" className="rounded-lg border border-[color:var(--studio-info-border)] bg-[var(--studio-info-bg)] px-4 py-3 text-[var(--studio-info-text)]">
                 <div className="flex items-center gap-3">
-                  <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  <MaterialIcon name="progress_activity" className="animate-spin text-base" />
                   <div>
-                    <p className="font-medium text-blue-900 text-sm">Processando Reunião</p>
-                    <p className="text-xs text-blue-700">{processingStatus}</p>
+                    <p className="text-sm font-medium">{t.shell.processingMeeting}</p>
+                    <p className="text-xs opacity-80">{processingStatus}</p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+            </div>
           )}
 
-          {/* Last Processed Meeting */}
           {lastProcessedMeeting && !isProcessing && showProcessedMessage && (
-            <Card className="mb-6 border-green-200 bg-green-50">
-              <CardContent className="py-3 px-4">
+            <div role="status" aria-live="polite" className="rounded-lg border border-[color:var(--studio-success-border)] bg-[var(--studio-success-bg)] px-4 py-3 text-[var(--studio-success-text)]">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <MaterialIcon name="check_circle" className="text-base" filled />
                     <div>
-                      <p className="font-medium text-green-900 text-sm">
-                        Reunião processada: {lastProcessedMeeting.title}
+                      <p className="text-sm font-medium">
+                        {t.shell.processedMeeting}: {lastProcessedMeeting.title}
                       </p>
-                      <p className="text-xs text-green-700">
-                        Arquivo salvo no histórico
+                      <p className="text-xs opacity-80">
+                        {t.shell.savedToHistory}
                       </p>
                     </div>
                   </div>
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     variant="outline"
                     onClick={() => MeetingStorage.downloadMeetingTxt(lastProcessedMeeting)}
-                    className="gap-2 h-8"
+                    className="h-8 gap-2 border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] hover:text-[var(--studio-text)]"
                   >
-                    <Download className="h-3 w-3" />
-                    Baixar
+                    <MaterialIcon name="download" className="text-sm" />
+                    {t.common.download}
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
+            </div>
           )}
-          
-          {/* Main Tabs */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2 bg-white">
-              <TabsTrigger value="record" className="gap-2">
-                <Mic className="h-4 w-4" />
-                Gravar Reunião
-              </TabsTrigger>
-              <TabsTrigger value="history" className="gap-2">
-                <History className="h-4 w-4" />
-                Histórico
-              </TabsTrigger>
-            </TabsList>
 
-            <TabsContent value="record" className="space-y-6">
-              <div className="grid lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                  <AdvancedAudioRecorder 
-                    onRecordingComplete={handleRecordingComplete}
-                  />
-                </div>
+          {activeTab === 'record' ? (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <AdvancedAudioRecorder
+                onRecordingComplete={handleRecordingComplete}
+                onReadinessChange={setCaptureReadiness}
+                locale={locale}
+                disabled={isProcessing}
+              />
 
-                <div className="space-y-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Como funciona</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex gap-3">
-                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                          <span className="text-xs font-medium text-blue-600">1</span>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-sm">Grave ou carregue áudio</h4>
-                          <p className="text-xs text-gray-600 mt-1">
-                            Capture reuniões ao vivo ou faça upload de arquivos
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex gap-3">
-                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                          <span className="text-xs font-medium text-blue-600">2</span>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-sm">IA processa automaticamente</h4>
-                          <p className="text-xs text-gray-600 mt-1">
-                            Gemini AI analisa e transcreve o conteúdo
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex gap-3">
-                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                          <span className="text-xs font-medium text-blue-600">3</span>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-sm">Receba resumo completo</h4>
-                          <p className="text-xs text-gray-600 mt-1">
-                            Download automático em .txt para uso offline
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Recursos</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ul className="space-y-2 text-sm">
-                        <li className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                          Gravação com monitoramento em tempo real
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                          Upload de múltiplos formatos de áudio
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                          Transcrição e resumo automático
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                          Identificação de ações e participantes
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                          Armazenamento local e download .txt
-                        </li>
-                      </ul>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="history">
-              <MeetingsList onNewRecording={() => setActiveTab('record')} />
-            </TabsContent>
-          </Tabs>
+              <SessionReadinessPanel
+                apiKeySourceLabel={apiKeySourceLabel}
+                captureReadiness={captureReadiness}
+                isConfigured={isConfigured}
+                isProcessing={isProcessing}
+                locale={locale}
+                lastProcessedMeetingTitle={lastProcessedMeeting?.title}
+                modelName={selectedModelName}
+                modelsCount={models.length}
+                providerName={providerLabel(provider)}
+                uploadLimitMb={MAX_AUDIO_UPLOAD_MB}
+              />
+            </div>
+          ) : (
+            <MeetingsList locale={locale} onNewRecording={() => setActiveTab('record')} />
+          )}
         </div>
       </main>
     </div>

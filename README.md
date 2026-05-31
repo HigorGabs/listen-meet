@@ -2,10 +2,10 @@
 
 ![Listen Meet Banner](https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=0,2,2,30,26&height=300&section=header&text=Listen%20Meet&fontSize=80&fontAlignY=35&fontColor=fff&desc=Transforme%20suas%20reuniões%20em%20insights%20inteligentes%20com%20IA&descAlignY=55&descSize=18)
 
-[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=28&duration=3000&pause=1000&color=4F46E5&center=true&vCenter=true&multiline=true&random=false&width=800&height=100&lines=🎤+Grave+%7C+📝+Transcreva+%7C+🤖+Analise;✨+Google+Gemini+2.5+Flash+%7C+⚡+Next.js+15)](https://git.io/typing-svg)
+[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=28&duration=3000&pause=1000&color=4F46E5&center=true&vCenter=true&multiline=true&random=false&width=800&height=100&lines=🎤+Grave+%7C+📝+Transcreva+%7C+🤖+Analise;✨+Google+Gemini+%7C+OpenRouter+%7C+⚡+Next.js+16)](https://git.io/typing-svg)
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js&logoColor=white" />
+  <img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js&logoColor=white" />
   <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" />
   <img src="https://img.shields.io/badge/Google_Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white" />
@@ -47,7 +47,7 @@
 ⚙️ Seleção de dispositivos de entrada  
 ⏯️ Controles de pause/play/stop
 🧪 Teste de áudio antes da gravação
-📁 Upload de arquivos (MP3, WAV, WEBM...)
+📁 Upload direto de arquivos até 4MB (MP3, WAV, WEBM...)
 🎚️ Múltiplos formatos de saída
 ```
 
@@ -70,7 +70,7 @@
 📅 Filtros por período (hoje/semana/mês)
 📈 Estatísticas consolidadas
 📄 Export individual em TXT
-💾 Armazenamento local seguro
+💾 Histórico local no navegador
 ```
 
 ---
@@ -156,14 +156,51 @@ npm install
 </details>
 
 <details>
+<summary><b>🧰 Pré-requisitos</b></summary>
+
+```bash
+# Next.js 16 exige Node moderno.
+# Recomendado:
+nvm use
+
+# Mínimo aceito pelo projeto:
+node --version # >= 20.9.0
+```
+
+</details>
+
+<details>
 <summary><b>🔑 2. Configure Gemini API</b></summary>
 
 ```bash
 # 🌐 Obtenha sua API Key gratuita
 # https://makersuite.google.com/app/apikey
 
-# ⚙️ Configure na primeira execução da app
-# A chave é salva localmente no navegador
+# ✅ Recomendado para desenvolvimento/local:
+cp .env.example .env.local
+# Edite .env.local e defina:
+GEMINI_API_KEY=sua-chave-do-gemini
+GEMINI_MODEL=gemini-flash-latest
+GEMINI_FALLBACK_MODELS=gemini-3.5-flash,gemini-2.5-flash,gemini-2.5-flash-lite
+
+# Opcionais: a interface também lista modelos ativos destes provedores em tempo real.
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=
+OPENAI_API_KEY=
+OPENAI_MODEL=
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=
+
+# Alternativa:
+# Na tela inicial, escolha "Servidor" ou "Minha chave", liste os modelos ativos
+# e selecione o modelo usado no processamento.
+# A aplicação remove chaves antigas salvas em localStorage.
+# Por segurança, chaves informadas na tela não são persistidas em sessionStorage.
+#
+# Produção:
+# O fallback para API keys do servidor fica desativado por padrão quando NODE_ENV=production.
+# Para uma instalação privada e controlada, habilite explicitamente:
+# LISTEN_MEET_ALLOW_SERVER_KEYS=true
 ```
 
 </details>
@@ -186,6 +223,20 @@ npm run dev
 ### 🎉 **Sem banco de dados • Sem autenticação • Sem configurações complexas!**
 
 </div>
+
+---
+
+## 🔐 Privacidade e Limites
+
+- A chave `GEMINI_API_KEY` deve ficar preferencialmente no servidor (`.env.local` ou variáveis da Vercel).
+- Na tela de configuração, você pode usar a chave do servidor em desenvolvimento/local ou informar uma chave própria para a sessão do navegador.
+- Em produção (`NODE_ENV=production`), o uso automático de chaves do servidor fica desativado por padrão para evitar consumo público de quota. Habilite `LISTEN_MEET_ALLOW_SERVER_KEYS=true` apenas em deployments privados ou protegidos.
+- Chaves digitadas pelo usuário são usadas em memória para a sessão atual e não são gravadas em `localStorage` ou `sessionStorage`.
+- A tela de configuração consulta os modelos ativos do Gemini, OpenRouter, OpenAI e Anthropic em tempo real antes da seleção.
+- O processamento direto de áudio está habilitado para Gemini e OpenRouter; OpenAI e Anthropic já possuem listagem de modelos para expansão posterior.
+- O histórico de reuniões fica no navegador via `localStorage`; não há sincronização entre dispositivos.
+- O processamento direto aceita arquivos de até **4MB** para respeitar o limite de payload das Vercel Functions.
+- Para reuniões longas, o próximo passo arquitetural é upload direto para storage (ex.: Vercel Blob) e processamento por referência.
 
 ---
 
@@ -350,7 +401,7 @@ timeline
 2. **📥 Clone** sua fork: `git clone https://github.com/seu-usuario/listen-meet.git`
 3. **🌿 Crie** uma branch: `git checkout -b feature/nova-funcionalidade`
 4. **💻 Desenvolva** suas alterações
-5. **🧪 Teste** tudo: `npm run build && npm run dev`
+5. **🧪 Teste** tudo: `npm run verify`
 6. **💾 Commit**: `git commit -m "feat: adiciona nova funcionalidade"`
 7. **📤 Push**: `git push origin feature/nova-funcionalidade`
 8. **🔀 PR**: Abra um Pull Request

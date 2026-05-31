@@ -1,47 +1,10 @@
-export interface MeetingRecord {
-  id: string
-  title: string
-  date: string
-  duration: number
-  summary: {
-    title: string
-    overview: string
-    summary?: string
-    keyPoints: string[]
-    actionItems: string[]
-    participants: string[]
-    topics: string[]
-    metrics?: {
-      efficiency: string
-      engagement: string
-      decisionsCount: number
-    }
-    timeline?: Array<{
-      phase: string
-      description: string
-      time: string
-    }>
-    tags?: {
-      meetingType: string
-      priority: string
-      status: string
-    }
-    insights?: {
-      sentiment: string
-      engagement: string
-      outcome: string
-    }
-    participationAnalysis?: Array<{
-      participant: string
-      talkTime: string
-      contributions: string
-      role: string
-    }>
-    transcript?: string
-  }
-  audioBlob?: Blob
-  filename: string
-}
+import {
+  buildAllMeetingsTxt,
+  buildMeetingTxt,
+  type MeetingRecord,
+} from '@/lib/meeting-summary'
+
+export type { MeetingRecord } from '@/lib/meeting-summary'
 
 export class MeetingStorage {
   private static STORAGE_KEY = 'listen-meet-recordings'
@@ -67,7 +30,6 @@ export class MeetingStorage {
       
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(recordingsToStore))
       
-      console.log('Meeting saved to localStorage:', meeting.id)
     } catch (error) {
       console.error('Error saving meeting:', error)
     }
@@ -100,64 +62,13 @@ export class MeetingStorage {
       const meetings = this.getAllMeetings()
       const filtered = meetings.filter(m => m.id !== id)
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filtered))
-      console.log('Meeting deleted:', id)
     } catch (error) {
       console.error('Error deleting meeting:', error)
     }
   }
 
   static downloadMeetingTxt(meeting: MeetingRecord): void {
-    const content = `RESUMO DA REUNIÃO - ${meeting.summary.title}
-Data: ${new Date(meeting.date).toLocaleDateString('pt-BR')}
-Duração: ${Math.floor(meeting.duration / 60)} minutos
-
-=== RESUMO ===
-${meeting.summary.summary || meeting.summary.overview}
-
-=== RESUMO GERAL ===
-${meeting.summary.overview}
-
-=== 📊 MÉTRICAS DA REUNIÃO ===
-Eficiência: ${meeting.summary.metrics?.efficiency || 'N/A'}
-Participação: ${meeting.summary.metrics?.engagement || 'N/A'}
-Decisões tomadas: ${meeting.summary.metrics?.decisionsCount || 'N/A'}
-
-=== ⏰ TIMELINE DA REUNIÃO ===
-${meeting.summary.timeline?.map(item => `${item.phase}: ${item.description} (${item.time})`).join('\n') || 'Timeline não disponível'}
-
-=== 🏷️ TAGS/CATEGORIAS ===
-Tipo de reunião: ${meeting.summary.tags?.meetingType || 'N/A'}
-Prioridade: ${meeting.summary.tags?.priority || 'N/A'}
-Status: ${meeting.summary.tags?.status || 'N/A'}
-
-=== 📈 INSIGHTS DA IA ===
-Sentiment: ${meeting.summary.insights?.sentiment || 'N/A'}
-Engagement: ${meeting.summary.insights?.engagement || 'N/A'}
-Outcome: ${meeting.summary.insights?.outcome || 'N/A'}
-
-=== 👥 ANÁLISE DE PARTICIPAÇÃO ===
-${meeting.summary.participationAnalysis?.map(p => 
-  `${p.participant}: ${p.talkTime} do tempo | ${p.contributions} | Papel: ${p.role}`
-).join('\n') || 'Análise não disponível'}
-
-=== PONTOS PRINCIPAIS ===
-${meeting.summary.keyPoints.map((point, index) => `${index + 1}. ${point}`).join('\n')}
-
-=== AÇÕES IDENTIFICADAS ===
-${meeting.summary.actionItems.map((action, index) => `${index + 1}. ${action}`).join('\n')}
-
-=== PARTICIPANTES ===
-${meeting.summary.participants.join(', ')}
-
-=== TÓPICOS ABORDADOS ===
-${meeting.summary.topics.join(', ')}
-
-=== TRANSCRIÇÃO COMPLETA ===
-${meeting.summary.transcript || 'Transcrição não disponível'}
-
----
-Gerado automaticamente pelo Listen Meet com Google Gemini AI
-`
+    const content = buildMeetingTxt(meeting)
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -172,27 +83,7 @@ Gerado automaticamente pelo Listen Meet com Google Gemini AI
 
   static exportAllMeetings(): void {
     const meetings = this.getAllMeetings()
-    const allContent = meetings.map(meeting => 
-      `${'='.repeat(80)}
-REUNIÃO: ${meeting.summary.title}
-Data: ${new Date(meeting.date).toLocaleDateString('pt-BR')}
-Duração: ${Math.floor(meeting.duration / 60)} minutos
-
-RESUMO: ${meeting.summary.overview}
-
-PONTOS PRINCIPAIS:
-${meeting.summary.keyPoints.map((point, index) => `${index + 1}. ${point}`).join('\n')}
-
-AÇÕES:
-${meeting.summary.actionItems.map((action, index) => `${index + 1}. ${action}`).join('\n')}
-
-PARTICIPANTES: ${meeting.summary.participants.join(', ')}
-TÓPICOS: ${meeting.summary.topics.join(', ')}
-
-${'='.repeat(80)}
-
-`
-    ).join('\n')
+    const allContent = buildAllMeetingsTxt(meetings)
 
     const blob = new Blob([allContent], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)

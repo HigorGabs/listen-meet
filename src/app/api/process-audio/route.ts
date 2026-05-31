@@ -1,37 +1,75 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import {
+  MAX_AUDIO_UPLOAD_BYTES,
+  getBaseMimeType,
+  validateAudioFile,
+  validateAudioSignature,
+} from '@/lib/audio-constraints'
+import {
+  buildMeetingTxt,
+  createMeetingFilename,
+  parseMeetingSummary,
+} from '@/lib/meeting-summary'
+import { getClientIp, processAudioLimiter } from '@/lib/rate-limit'
+import {
+  getAudioFormat,
+  getAvailableServerApiKey,
+  getGeminiFallbackModels,
+  getProvider,
+  isAiProviderId,
+  type AiProviderId,
+} from '@/lib/ai-providers'
+import { normalizeLocale, type Locale } from '@/lib/i18n'
 
-export async function POST(request: NextRequest) {
-  try {
-    const formData = await request.formData()
-    const audioFile = formData.get('audio') as File
-    const apiKey = formData.get('apiKey') as string
-    const duration = parseInt(formData.get('duration') as string)
+export const runtime = 'nodejs'
+export const maxDuration = 300
 
-    if (!apiKey) {
-      return NextResponse.json({ error: 'API Key é obrigatória' }, { status: 400 })
-    }
+interface PublicProcessingError {
+  message: string
+  status: number
+}
 
-    if (!audioFile) {
-      return NextResponse.json({ error: 'Arquivo de áudio é obrigatório' }, { status: 400 })
-    }
+function getStringValue(value: FormDataEntryValue | null): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
 
-    console.log('Processing audio file:', audioFile.name, audioFile.size, 'bytes')
+function getApiKey(provider: AiProviderId, value: FormDataEntryValue | null): string {
+  const providedKey = typeof value === 'string' ? value.trim() : ''
+  return providedKey || getAvailableServerApiKey(provider)
+}
 
-    // Convert audio file to base64
-    const audioBuffer = await audioFile.arrayBuffer()
-    const audioBase64 = Buffer.from(audioBuffer).toString('base64')
+function parseDuration(value: FormDataEntryValue | null): number {
+  const duration = Number.parseInt(typeof value === 'string' ? value : '', 10)
+  return Number.isFinite(duration) && duration >= 0 ? duration : 0
+}
 
-    // Process with Gemini
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+function parseContentLength(request: NextRequest): number | null {
+  const header = request.headers.get('content-length')
+  if (!header) return null
 
-    const prompt = `
+  const contentLength = Number(header)
+  return Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null
+}
+
+function getOpenRouterReferer(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  }
+  return 'http://localhost:3000'
+}
+
+function buildMeetingPrompt(locale: Locale, duration: number): string {
+  const durationMinutes = Math.floor(duration / 60)
+  const outputLanguage = locale === 'en' ? 'English' : 'português brasileiro'
+
+  return `
 Analise o seguinte arquivo de áudio de uma reunião e gere um resumo estruturado.
 
-DURAÇÃO: ${Math.floor(duration / 60)} minutos
+DURAÇÃO: ${durationMinutes} minutos
 
-Por favor, forneça um resumo estruturado no seguinte formato JSON:
+Forneça um resumo estruturado no seguinte formato JSON, preservando exatamente as chaves abaixo:
 
 {
   "title": "Título sugerido para a reunião",
@@ -85,101 +123,273 @@ INSTRUÇÕES:
 - Avalie se houve decisões claras ou se precisa follow-up
 - Distribua tempo de fala por participante (aproximado)
 - Identifique principais contribuições de cada um
-- Use português brasileiro
+- Escreva todos os valores textuais em ${outputLanguage}
 - Seja conciso mas abrangente
 - Se não conseguir identificar participantes específicos, use "Participante A", "Participante B", etc.
 
 Responda APENAS com o JSON válido, sem texto adicional.
 `
+}
 
-    console.log('Sending audio to Gemini for processing...')
-    
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: audioFile.type,
-          data: audioBase64
+function isTransientGeminiError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+
+  return /\b(429|500|502|503|504)\b|high demand|Service Unavailable|temporar/i.test(error.message)
+}
+
+function isProviderAuthError(error: unknown): boolean {
+  return error instanceof Error && /\b(401|403)\b|API key|api key|unauthorized|forbidden|permission/i.test(error.message)
+}
+
+function isModelUnavailableError(error: unknown): boolean {
+  return error instanceof Error && /\b404\b|not found|no longer available|not supported|unsupported model|model .*not available/i.test(error.message)
+}
+
+function getPublicProcessingError(error: unknown): PublicProcessingError {
+  if (isProviderAuthError(error)) {
+    return {
+      message: 'A API key do provedor selecionado foi recusada. Verifique a chave cadastrada e tente novamente.',
+      status: 401,
+    }
+  }
+
+  if (isTransientGeminiError(error)) {
+    return {
+      message: 'O provedor de IA está temporariamente indisponível ou com alta demanda. Tente novamente em instantes.',
+      status: 503,
+    }
+  }
+
+  if (isModelUnavailableError(error)) {
+    return {
+      message: 'O modelo selecionado não está disponível para essa API key. Atualize a lista de modelos e selecione outro.',
+      status: 400,
+    }
+  }
+
+  return {
+    message: 'Não foi possível processar o áudio. Verifique o arquivo e tente novamente.',
+    status: 500,
+  }
+}
+
+async function generateWithGeminiFallback(
+  genAI: GoogleGenerativeAI,
+  audio: { mimeType: string; data: string },
+  prompt: string,
+  selectedModel?: string
+): Promise<string> {
+  let lastError: unknown
+
+  for (const modelName of getGeminiFallbackModels(selectedModel)) {
+    const model = genAI.getGenerativeModel({ model: modelName })
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const result = await model.generateContent([
+          {
+            inlineData: audio,
+          },
+          { text: prompt },
+        ])
+
+        return result.response.text()
+      } catch (error) {
+        lastError = error
+
+        if (isProviderAuthError(error)) {
+          throw error
         }
-      },
-      { text: prompt }
-    ])
 
-    const response = await result.response
-    const text = response.text()
+        if (isModelUnavailableError(error)) {
+          break
+        }
 
-    console.log('Raw Gemini response:', text.substring(0, 500) + '...')
+        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)))
+      }
+    }
+  }
 
-    // Try to extract JSON from response
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error('No JSON found in Gemini response')
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Gemini unavailable')
+}
+
+async function generateWithOpenRouter(
+  apiKey: string,
+  model: string,
+  audio: { data: string; format: string },
+  prompt: string
+): Promise<string> {
+  if (!model) throw new Error('Selecione um modelo do OpenRouter.')
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': getOpenRouterReferer(),
+      'X-Title': 'Listen Meet',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            {
+              type: 'input_audio',
+              inputAudio: {
+                data: audio.data,
+                format: audio.format,
+              },
+            },
+          ],
+        },
+      ],
+      stream: false,
+    }),
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw new Error(data?.error?.message || data?.error || 'Falha ao chamar OpenRouter.')
+  }
+
+  const content = data?.choices?.[0]?.message?.content
+
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => part?.text || '')
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  throw new Error('OpenRouter retornou resposta sem conteúdo.')
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const contentLength = parseContentLength(request)
+    if (!contentLength) {
+      return NextResponse.json(
+        { error: 'Content-Length é obrigatório para upload de áudio.' },
+        { status: 411 }
+      )
     }
 
-    const summary = JSON.parse(jsonMatch[0])
-
-    // Validate structure
-    if (!summary.title || !summary.overview || !Array.isArray(summary.keyPoints)) {
-      throw new Error('Invalid summary structure from Gemini')
+    if (contentLength > MAX_AUDIO_UPLOAD_BYTES + 512 * 1024) {
+      return NextResponse.json(
+        { error: 'Arquivo muito grande para processamento direto.' },
+        { status: 413 }
+      )
     }
 
-    console.log('Audio processing completed successfully')
+    const rateLimit = processAudioLimiter.check(getClientIp(request))
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Muitas solicitações. Aguarde alguns minutos antes de tentar novamente.' },
+        { status: 429 }
+      )
+    }
+
+    const formData = await request.formData()
+    const audioValue = formData.get('audio')
+    const providerValue = getStringValue(formData.get('provider')) || 'gemini'
+    const provider: AiProviderId = isAiProviderId(providerValue) ? providerValue : 'gemini'
+    const model = getStringValue(formData.get('model'))
+    const apiKey = getApiKey(provider, formData.get('apiKey'))
+    const duration = parseDuration(formData.get('duration'))
+    const locale = normalizeLocale(getStringValue(formData.get('locale')))
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Configure uma API key do provedor selecionado.' },
+        { status: 400 }
+      )
+    }
+
+    if (provider !== 'gemini' && provider !== 'openrouter') {
+      return NextResponse.json(
+        { error: 'Processamento de áudio direto está disponível para Gemini e OpenRouter nesta versão.' },
+        { status: 400 }
+      )
+    }
+
+    if (!(audioValue instanceof File)) {
+      return NextResponse.json({ error: 'Arquivo de áudio é obrigatório' }, { status: 400 })
+    }
+
+    const audioFile = audioValue
+    const validation = validateAudioFile({
+      name: audioFile.name,
+      type: audioFile.type,
+      size: audioFile.size,
+    })
+
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: validation.message },
+        { status: validation.status || 400 }
+      )
+    }
+
+    const audioBuffer = await audioFile.arrayBuffer()
+    const signatureValidation = validateAudioSignature({
+      name: audioFile.name,
+      type: audioFile.type,
+      bytes: new Uint8Array(audioBuffer),
+    })
+
+    if (!signatureValidation.valid) {
+      return NextResponse.json(
+        { error: signatureValidation.message },
+        { status: signatureValidation.status || 400 }
+      )
+    }
+
+    const audioBase64 = Buffer.from(audioBuffer).toString('base64')
+
+    const prompt = buildMeetingPrompt(locale, duration)
+
+    const text = provider === 'gemini'
+      ? await generateWithGeminiFallback(
+          new GoogleGenerativeAI(apiKey),
+          {
+            mimeType: getBaseMimeType(audioFile.type) || 'audio/webm',
+            data: audioBase64
+          },
+          prompt,
+          model
+        )
+      : await generateWithOpenRouter(
+          apiKey,
+          model,
+          {
+            data: audioBase64,
+            format: getAudioFormat(audioFile.name, audioFile.type),
+          },
+          prompt
+        )
+
+    const summary = parseMeetingSummary(text)
 
     // Generate filename for download
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const filename = `reuniao-${timestamp}.txt`
+    const processedAt = new Date()
+    const filename = createMeetingFilename(processedAt)
 
     // Create downloadable content
-    const downloadContent = `RESUMO DA REUNIÃO - ${summary.title}
-Data: ${new Date().toLocaleDateString('pt-BR')}
-Duração: ${Math.floor(duration / 60)} minutos
-
-=== RESUMO ===
-${summary.summary || summary.overview}
-
-=== RESUMO GERAL ===
-${summary.overview}
-
-=== 📊 MÉTRICAS DA REUNIÃO ===
-Eficiência: ${summary.metrics?.efficiency || 'N/A'}
-Participação: ${summary.metrics?.engagement || 'N/A'}
-Decisões tomadas: ${summary.metrics?.decisionsCount || 'N/A'}
-
-=== ⏰ TIMELINE DA REUNIÃO ===
-${summary.timeline?.map((item: { phase: string; description: string; time: string }) => `${item.phase}: ${item.description} (${item.time})`).join('\n') || 'Timeline não disponível'}
-
-=== 🏷️ TAGS/CATEGORIAS ===
-Tipo de reunião: ${summary.tags?.meetingType || 'N/A'}
-Prioridade: ${summary.tags?.priority || 'N/A'}
-Status: ${summary.tags?.status || 'N/A'}
-
-=== 📈 INSIGHTS DA IA ===
-Sentiment: ${summary.insights?.sentiment || 'N/A'}
-Engagement: ${summary.insights?.engagement || 'N/A'}
-Outcome: ${summary.insights?.outcome || 'N/A'}
-
-=== 👥 ANÁLISE DE PARTICIPAÇÃO ===
-${summary.participationAnalysis?.map((p: { participant: string; talkTime: string; contributions: string; role: string }) => 
-  `${p.participant}: ${p.talkTime} do tempo | ${p.contributions} | Papel: ${p.role}`
-).join('\n') || 'Análise não disponível'}
-
-=== PONTOS PRINCIPAIS ===
-${summary.keyPoints.map((point: string, index: number) => `${index + 1}. ${point}`).join('\n')}
-
-=== AÇÕES IDENTIFICADAS ===
-${summary.actionItems.map((action: string, index: number) => `${index + 1}. ${action}`).join('\n')}
-
-=== PARTICIPANTES ===
-${summary.participants.join(', ')}
-
-=== TÓPICOS ABORDADOS ===
-${summary.topics.join(', ')}
-
-=== TRANSCRIÇÃO COMPLETA ===
-${summary.transcript || 'Transcrição não disponível'}
-
----
-Gerado automaticamente pelo Listen Meet com Google Gemini AI
-`
+    const downloadContent = buildMeetingTxt({
+      summary,
+      duration,
+      date: processedAt,
+      locale,
+      providerName: getProvider(provider).name,
+      modelName: model,
+    })
 
     return NextResponse.json({
       success: true,
@@ -189,12 +399,13 @@ Gerado automaticamente pelo Listen Meet com Google Gemini AI
       duration
     })
 
-  } catch (error: unknown) {
-    console.error('Error processing audio:', error)
+  } catch (error) {
+    console.error('Error processing audio:', error instanceof Error ? error.message : error)
+    const publicError = getPublicProcessingError(error)
     
     return NextResponse.json({
-      error: 'Erro ao processar áudio: ' + (error instanceof Error ? error.message : 'Erro desconhecido'),
+      error: publicError.message,
       fallback: true
-    }, { status: 500 })
+    }, { status: publicError.status })
   }
 }

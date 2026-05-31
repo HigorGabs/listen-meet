@@ -1,36 +1,49 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { MaterialIcon } from '@/components/ui/material-icon'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Progress } from '@/components/ui/progress'
-import { Badge } from '@/components/ui/badge'
-import { 
-  Mic, 
-  Square, 
-  Pause, 
-  Play, 
-  Upload, 
-  HelpCircle,
-  CheckCircle,
-  AlertCircle
-} from 'lucide-react'
 import { useAdvancedAudioRecorder } from '@/hooks/useAdvancedAudioRecorder'
 import { AudioSetupModal } from './AudioSetupModal'
 import { AudioLevelMeter } from './AudioLevelMeter'
 import { cn } from '@/lib/utils'
+import {
+  MAX_AUDIO_UPLOAD_MB,
+  MIN_RECORDING_DURATION_SECONDS,
+  shouldProcessRecording,
+} from '@/lib/audio-constraints'
+import { getMessages, type Locale } from '@/lib/i18n'
 
-interface AdvancedAudioRecorderProps {
-  onRecordingComplete?: (data: { blob: Blob; duration: number; filename?: string; source: 'recording' | 'upload' }) => void
-  className?: string
+export interface AudioCaptureReadiness {
+  hasAudioDevice: boolean
+  hasAudioSignal: boolean
+  hasCaptureError: boolean
 }
 
-export function AdvancedAudioRecorder({ onRecordingComplete, className }: AdvancedAudioRecorderProps) {
+interface AdvancedAudioRecorderProps {
+  onRecordingComplete?: (data: { blob: Blob; duration: number; filename?: string; source: 'recording' | 'upload' }) => void | Promise<void>
+  onReadinessChange?: (readiness: AudioCaptureReadiness) => void
+  className?: string
+  disabled?: boolean
+  locale?: Locale
+}
+
+export function AdvancedAudioRecorder({
+  onRecordingComplete,
+  onReadinessChange,
+  className,
+  disabled = false,
+  locale = 'pt-BR',
+}: AdvancedAudioRecorderProps) {
+  const t = getMessages(locale)
   const [showSetupModal, setShowSetupModal] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
+  const [discardedRecordingMessage, setDiscardedRecordingMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const processedRecordingRef = useRef<Blob | null>(null)
+  const lastReadinessRef = useRef<AudioCaptureReadiness | null>(null)
 
   const {
     isRecording,
@@ -68,49 +81,20 @@ export function AdvancedAudioRecorder({ onRecordingComplete, className }: Advanc
   }
 
   const handleStartRecording = async () => {
-    console.log('Iniciando gravação...')
     clearError()
-    try {
-      await startRecording()
-      console.log('Gravação iniciada com sucesso')
-    } catch (error) {
-      console.error('Erro ao iniciar gravação:', error)
-    }
+    setDiscardedRecordingMessage('')
+    setIsTesting(false)
+    await startRecording()
   }
 
   const handleStopRecording = () => {
-    console.log('Parando gravação...')
     stopRecording()
   }
-
-  // Handle recording completion - only once
-  const [hasProcessed, setHasProcessed] = useState(false)
-  
-  useEffect(() => {
-    if (recordingData && onRecordingComplete && !hasProcessed) {
-      console.log('Chamando onRecordingComplete com:', recordingData)
-      setHasProcessed(true)
-      onRecordingComplete(recordingData)
-    }
-  }, [recordingData, onRecordingComplete, hasProcessed])
-
-  // Reset processed flag when recordingData changes
-  useEffect(() => {
-    if (!recordingData) {
-      setHasProcessed(false)
-    }
-  }, [recordingData])
-
-  // Reset testing state when recording starts
-  useEffect(() => {
-    if (isRecording && isTesting) {
-      setIsTesting(false)
-    }
-  }, [isRecording, isTesting])
 
   const handleFileInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
+      setDiscardedRecordingMessage('')
       await handleFileUpload(file)
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
@@ -123,214 +107,358 @@ export function AdvancedAudioRecorder({ onRecordingComplete, className }: Advanc
   }
 
   const handleTestAudio = async () => {
-    console.log('handleTestAudio chamado, isTesting:', isTesting)
     if (!isTesting) {
       setIsTesting(true)
-      console.log('Iniciando startMonitoring...')
-      await startMonitoring()
+      const started = await startMonitoring()
+      if (!started) setIsTesting(false)
     } else {
       setIsTesting(false)
-      console.log('Parando monitoramento...')
       stopMonitoring()
     }
   }
 
+  const studioState = isRecording
+    ? isPaused
+      ? t.recorder.sessionPaused
+      : t.recorder.sessionActive
+    : isTesting
+      ? t.recorder.monitoringInput
+      : t.recorder.readyToRecord
+
+  const captureState = isRecording
+    ? isPaused
+      ? t.recorder.paused
+      : t.recorder.recording
+    : isTesting
+      ? t.recorder.testing
+      : isMonitoring
+        ? t.recorder.monitoring
+        : t.recorder.inactive
+
+  const signalActive = isMonitoring || isRecording
+  const captureMode = isRecording
+    ? isPaused
+      ? t.recorder.paused
+      : t.recorder.live
+    : isTesting || isMonitoring
+      ? t.recorder.test
+      : t.recorder.ready
+  const captureSource = recordingData?.source === 'upload' ? t.recorder.upload : t.recorder.microphone
+  const signalLevel = `${Math.round(audioLevel)}%`
+  const canShowRecordingResult = recordingData ? shouldProcessRecording(recordingData) : false
+
+  useEffect(() => {
+    if (recordingData && processedRecordingRef.current !== recordingData.blob) {
+      processedRecordingRef.current = recordingData.blob
+
+      if (!shouldProcessRecording(recordingData)) {
+        setDiscardedRecordingMessage(t.recorder.shortDiscarded(MIN_RECORDING_DURATION_SECONDS))
+        return
+      }
+
+      setDiscardedRecordingMessage('')
+      if (onRecordingComplete) {
+        void onRecordingComplete(recordingData)
+      }
+    }
+
+    if (!recordingData) {
+      processedRecordingRef.current = null
+      setDiscardedRecordingMessage('')
+    }
+  }, [recordingData, onRecordingComplete, t])
+
+  useEffect(() => {
+    const nextReadiness = {
+      hasAudioDevice: audioDevices.length > 0,
+      hasAudioSignal: signalActive && audioLevel > 1,
+      hasCaptureError: Boolean(error),
+    }
+
+    const previous = lastReadinessRef.current
+    if (
+      previous?.hasAudioDevice === nextReadiness.hasAudioDevice &&
+      previous?.hasAudioSignal === nextReadiness.hasAudioSignal &&
+      previous?.hasCaptureError === nextReadiness.hasCaptureError
+    ) {
+      return
+    }
+
+    lastReadinessRef.current = nextReadiness
+    onReadinessChange?.(nextReadiness)
+  }, [audioDevices.length, audioLevel, error, onReadinessChange, signalActive])
+
   return (
-    <Card className={cn("w-full", className)}>
-      <CardHeader>
-        <div className="flex items-center justify-between">
+    <section
+      className={cn(
+        'relative overflow-hidden rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] shadow-2xl shadow-black/20',
+        className
+      )}
+    >
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--studio-primary)] to-transparent" />
+
+      <header className="flex flex-col gap-4 border-b border-[color:var(--studio-border)] bg-[var(--studio-panel)] px-5 py-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--studio-primary)]">
+            <MaterialIcon name="radio_button_checked" className={cn('text-sm', isRecording && !isPaused && 'animate-pulse')} />
+            {studioState}
+          </div>
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <Mic className="w-5 h-5" />
-              Gravador de Áudio Avançado
-            </CardTitle>
-            <CardDescription>
-              Grave do microfone ou faça upload de arquivos de áudio
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setShowSetupModal(true)}
-                >
-                  <HelpCircle className="w-4 h-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Como capturar áudio de reuniões</p>
-              </TooltipContent>
-            </Tooltip>
+            <h2 className="text-2xl font-semibold tracking-tight text-[var(--studio-text)]">{t.recorder.title}</h2>
+            <p className="mt-1 text-sm text-[var(--studio-muted)]">
+              {t.recorder.description}
+            </p>
           </div>
         </div>
-      </CardHeader>
 
-      <CardContent className="space-y-6">
-        {error && (
-          <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg">
-            <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">{error}</span>
-            <Button variant="ghost" size="sm" onClick={clearError} className="ml-auto">
-              ×
-            </Button>
+        <div className="flex items-center gap-2">
+          <div className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-card-alt)] px-3 py-2 text-right">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--studio-subtle)]">{t.recorder.state}</p>
+            <p className="text-sm font-semibold text-[var(--studio-text)]">{captureState}</p>
           </div>
-        )}
-
-        {/* Device Selection */}
-        <div className="space-y-3">
-          <label className="text-sm font-medium">Dispositivo de Áudio</label>
-          <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um dispositivo de áudio" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="default">Microfone Padrão</SelectItem>
-              {audioDevices.map((device) => (
-                <SelectItem key={device.deviceId} value={device.deviceId}>
-                  {device.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          
-          {/* Audio Level Monitor */}
-          <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">
-                  Nível de Áudio
-                </span>
-                <Badge variant="outline" className="text-xs">
-                  {isRecording ? 'Gravando' : isTesting ? 'Testando' : 'Monitorando'}
-                </Badge>
-              </div>
-              <AudioLevelMeter 
-                level={audioLevel} 
-                isActive={isMonitoring} 
-                className="w-full" 
-              />
-              {audioLevel === 0 && isMonitoring && (
-                <p className="text-xs text-muted-foreground">
-                  Fale algo para ver o nível de áudio
-                </p>
-              )}
-            </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSetupModal(true)}
+                className="h-10 w-10 border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] p-0 text-[var(--studio-muted)] hover:bg-[var(--studio-card-alt)] hover:text-[var(--studio-text)]"
+                aria-label={t.recorder.helpAria}
+              >
+                <MaterialIcon name="help" className="text-base" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{t.recorder.helpTooltip}</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
+      </header>
 
-        {/* Recording Controls */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {!isRecording ? (
-                <>
-                  <Button onClick={handleStartRecording} size="lg">
-                    <Mic className="w-4 h-4 mr-2" />
-                    Iniciar Gravação
-                  </Button>
-                  <Button 
-                    onClick={handleTestAudio} 
-                    variant="outline"
-                    size="lg"
-                  >
-                    <Mic className="w-4 h-4 mr-2" />
-                    {isTesting ? 'Parar Teste' : 'Testar Áudio'}
-                  </Button>
-                </>
-              ) : (
-                <div className="flex items-center gap-2">
-                  {!isPaused ? (
-                    <Button onClick={pauseRecording} variant="outline">
-                      <Pause className="w-4 h-4 mr-2" />
-                      Pausar
-                    </Button>
-                  ) : (
-                    <Button onClick={resumeRecording} variant="outline">
-                      <Play className="w-4 h-4 mr-2" />
-                      Continuar
-                    </Button>
-                  )}
-                  <Button onClick={handleStopRecording} variant="destructive">
-                    <Square className="w-4 h-4 mr-2" />
-                    Parar
-                  </Button>
-                </div>
-              )}
-              
-              <div className="text-2xl font-mono">
-                {formatTime(duration)}
-              </div>
-              
-              {isRecording && (
-                <Badge variant={isPaused ? "secondary" : "default"}>
-                  {isPaused ? "Pausado" : "Gravando"}
-                </Badge>
-              )}
-            </div>
-          </div>
-
-          {isRecording && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Gravando...</span>
-                <span>{formatTime(duration)}</span>
-              </div>
-              <Progress value={100} className="h-1" />
+      <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-5">
+          {error && (
+            <div role="alert" className="flex items-center gap-2 rounded-lg border border-[color:var(--studio-danger-border)] bg-[var(--studio-danger-bg)] p-3 text-[var(--studio-danger-text)]">
+              <MaterialIcon name="error" className="text-base" />
+              <span className="text-sm">{error}</span>
+              <Button variant="ghost" size="sm" onClick={clearError} className="ml-auto text-[var(--studio-danger-text)] hover:bg-[var(--studio-danger-bg)]">
+                {t.common.close}
+              </Button>
             </div>
           )}
-        </div>
 
-        {/* File Upload */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">Ou faça upload de um arquivo</label>
-            <span className="text-xs text-muted-foreground">
-              MP3, WAV, WEBM, OGG, AAC, M4A, FLAC (max 100MB)
-            </span>
-          </div>
-          <Button 
-            variant="outline" 
-            onClick={handleUploadClick}
-            className="w-full"
-            disabled={isRecording}
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Selecionar Arquivo de Áudio
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="audio/*,.mp3,.wav,.webm,.ogg,.aac,.m4a,.flac,.3gp,.amr"
-            onChange={handleFileInputChange}
-            className="hidden"
-          />
-        </div>
-
-        {/* Recording Result */}
-        {recordingData && (
-          <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-950">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="w-4 h-4 text-green-600" />
-              <span className="font-medium text-green-800 dark:text-green-200">
-                {recordingData.source === 'recording' ? 'Gravação Concluída' : 'Arquivo Carregado'}
-              </span>
+          {discardedRecordingMessage && (
+            <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-lg border border-[color:var(--studio-warning-border)] bg-[var(--studio-warning-bg)] p-3 text-[var(--studio-warning-text)]">
+              <MaterialIcon name="error" className="text-base" />
+              <span className="text-sm">{discardedRecordingMessage}</span>
             </div>
-            <div className="space-y-1 text-sm text-green-700 dark:text-green-300">
-              {recordingData.filename && (
-                <div>Arquivo: {recordingData.filename}</div>
+          )}
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <div className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] p-5">
+              <div className="flex flex-col gap-4">
+                <div>
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-[var(--studio-subtle)]">
+                    <MaterialIcon name="timer" className="text-base text-[var(--studio-secondary)]" />
+                    {t.recorder.sessionTime}
+                  </div>
+                  <div className="mt-3 whitespace-nowrap font-mono text-6xl font-semibold leading-none text-[var(--studio-text)] sm:text-7xl">
+                    {formatTime(duration)}
+                  </div>
+                </div>
+                <div className="flex w-fit items-center gap-2 rounded-full border border-[color:var(--studio-border)] bg-[var(--studio-panel)] px-3 py-1.5 text-sm text-[var(--studio-muted)]">
+                  <span className={cn(
+                    'h-2 w-2 rounded-full',
+                    isRecording && !isPaused ? 'animate-pulse bg-[var(--studio-primary)]' : 'bg-zinc-500'
+                  )} />
+                  {isRecording && !isPaused ? t.recorder.live : captureState}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
+              <div className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-card-alt)] p-3">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--studio-subtle)]">{t.recorder.source}</p>
+                <p className="mt-2 text-sm font-semibold text-[var(--studio-text)]">{captureSource}</p>
+              </div>
+              <div className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-card-alt)] p-3">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--studio-subtle)]">{t.recorder.signal}</p>
+                <p className="mt-2 text-sm font-semibold text-[var(--studio-text)]">{signalLevel}</p>
+              </div>
+              <div className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-card-alt)] p-3">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--studio-subtle)]">{t.recorder.mode}</p>
+                <p className="mt-2 text-sm font-semibold text-[var(--studio-text)]">{captureMode}</p>
+              </div>
+            </div>
+          </div>
+
+          <section className="space-y-3 rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <MaterialIcon name="graphic_eq" className="text-base text-[var(--studio-primary)]" />
+                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--studio-muted)]">{t.recorder.liveSignal}</h3>
+              </div>
+              {audioLevel === 0 && signalActive && (
+                <span className="text-xs text-[var(--studio-warning-text)]">{t.recorder.calibrate}</span>
               )}
-              <div>Duração: {formatTime(recordingData.duration)}</div>
-              <div>Tamanho: {formatFileSize(recordingData.size)}</div>
-              <div>Tipo: {recordingData.blob.type || 'audio/webm'}</div>
             </div>
-          </div>
-        )}
-      </CardContent>
+            <AudioLevelMeter level={audioLevel} isActive={signalActive} locale={locale} />
+          </section>
 
-      <AudioSetupModal 
-        open={showSetupModal} 
-        onOpenChange={setShowSetupModal} 
+          <div className="grid gap-3 sm:grid-cols-2">
+            {!isRecording ? (
+              <>
+                <Button
+                  onClick={handleStartRecording}
+                  size="lg"
+                  disabled={disabled}
+                  className="h-12 rounded-lg bg-[var(--studio-primary)] font-semibold text-[#061021] hover:opacity-90"
+                >
+                  <MaterialIcon name="mic" className="text-base" />
+                  {t.recorder.start}
+                </Button>
+                <Button
+                  onClick={handleTestAudio}
+                  variant="outline"
+                  size="lg"
+                  disabled={disabled}
+                  className="h-12 rounded-lg border-[color:var(--studio-border)] bg-[var(--studio-panel)] font-semibold text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] hover:text-[var(--studio-text)]"
+                >
+                  <MaterialIcon name="headphones" className="text-base" />
+                  {isTesting ? t.recorder.stopTest : t.recorder.testAudio}
+                </Button>
+              </>
+            ) : (
+              <>
+                {!isPaused ? (
+                  <Button
+                    onClick={pauseRecording}
+                    variant="outline"
+                    size="lg"
+                    disabled={disabled}
+                    className="h-12 rounded-lg border-[color:var(--studio-border)] bg-[var(--studio-panel)] font-semibold text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] hover:text-[var(--studio-text)]"
+                  >
+                    <MaterialIcon name="pause" className="text-base" />
+                    {t.recorder.pause}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={resumeRecording}
+                    variant="outline"
+                    size="lg"
+                    disabled={disabled}
+                    className="h-12 rounded-lg border-[color:var(--studio-border)] bg-[var(--studio-panel)] font-semibold text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] hover:text-[var(--studio-text)]"
+                  >
+                    <MaterialIcon name="play_arrow" className="text-base" />
+                    {t.recorder.continue}
+                  </Button>
+                )}
+                <Button onClick={handleStopRecording} variant="destructive" size="lg" className="h-12 rounded-lg font-semibold">
+                  <MaterialIcon name="stop" className="text-base" filled />
+                  {t.recorder.stop}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-4">
+            <div className="mb-4 flex items-center gap-2">
+              <MaterialIcon name="tune" className="text-base text-[var(--studio-secondary)]" />
+              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--studio-muted)]">{t.recorder.inputMatrix}</h3>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="audio-device" className="text-xs text-[var(--studio-subtle)]">{t.recorder.device}</label>
+              <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
+                <SelectTrigger id="audio-device" className="w-full border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] text-[var(--studio-text)]">
+                  <SelectValue placeholder={t.recorder.device} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">{t.recorder.defaultMic}</SelectItem>
+                  {audioDevices.map((device) => (
+                    <SelectItem key={device.deviceId} value={device.deviceId}>
+                      {device.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[10px] uppercase tracking-[0.14em] text-[var(--studio-subtle)]">
+              <div className="rounded-md bg-[var(--studio-panel-strong)] p-2">{t.recorder.mic}</div>
+              <div className="rounded-md bg-[var(--studio-panel-strong)] p-2">{t.recorder.virtual}</div>
+              <div className="rounded-md bg-[var(--studio-panel-strong)] p-2">{t.recorder.upload}</div>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-dashed border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-md bg-[var(--studio-secondary-soft)] p-2 text-[var(--studio-secondary)]">
+                <MaterialIcon name="audio_file" className="text-base" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-[var(--studio-text)]">{t.recorder.uploadArea}</p>
+                <p className="mt-1 text-xs leading-5 text-[var(--studio-subtle)]">
+                  {t.recorder.uploadFormats(MAX_AUDIO_UPLOAD_MB)}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleUploadClick}
+              className="mt-4 w-full border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] hover:text-[var(--studio-text)]"
+              disabled={isRecording || disabled}
+            >
+              <MaterialIcon name="upload" className="text-base" />
+              {t.common.selectFile}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/*,.mp3,.wav,.webm,.ogg,.aac,.m4a,.flac,.3gp,.amr"
+              onChange={handleFileInputChange}
+              className="hidden"
+            />
+          </section>
+
+          {recordingData && canShowRecordingResult && (
+            <section className="rounded-lg border border-[color:var(--studio-primary-border)] bg-[var(--studio-primary-soft)] p-4">
+              <div className="mb-2 flex items-center gap-2 text-[var(--studio-primary)]">
+                <MaterialIcon name="check_circle" className="text-base" filled />
+                <span className="font-medium">
+                  {recordingData.source === 'recording' ? t.recorder.recordingCompleted : t.recorder.fileUploaded}
+                </span>
+              </div>
+              <div className="space-y-1 text-xs text-[var(--studio-muted)]">
+                {recordingData.filename && <div>{t.recorder.file}: {recordingData.filename}</div>}
+                <div>{t.recorder.duration}: {formatTime(recordingData.duration)}</div>
+                <div>{t.recorder.size}: {formatFileSize(recordingData.size)}</div>
+                <div>{t.recorder.type}: {recordingData.blob.type || 'audio/webm'}</div>
+              </div>
+            </section>
+          )}
+
+          <section className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--studio-text)]">
+              <MaterialIcon name="route" className="text-base text-[var(--studio-primary)]" />
+              {t.recorder.routeTitle}
+            </div>
+            <p className="mt-2 text-xs leading-5 text-[var(--studio-subtle)]">
+              {t.recorder.routeDescription}
+            </p>
+            <div className="mt-3 flex items-center gap-2 text-xs text-[var(--studio-subtle)]">
+              <MaterialIcon name="hard_drive" className="text-base" />
+              {t.recorder.localHistory}
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <AudioSetupModal
+        open={showSetupModal}
+        onOpenChange={setShowSetupModal}
+        locale={locale}
       />
-    </Card>
+    </section>
   )
 }
