@@ -53,7 +53,15 @@ export function createRateLimiter({ windowMs, maxRequests }: RateLimitOptions) {
   }
 }
 
+function getPlatformClientIp(request: Request): string {
+  const platformRequest = request as Request & { ip?: unknown }
+  return typeof platformRequest.ip === 'string' ? platformRequest.ip.trim() : ''
+}
+
 export function getClientIp(request: Request): string {
+  const platformIp = getPlatformClientIp(request)
+  if (platformIp) return platformIp
+
   const trustProxyHeaders = process.env.LISTEN_MEET_TRUST_PROXY_HEADERS === 'true'
   if (!trustProxyHeaders) return 'unknown'
 

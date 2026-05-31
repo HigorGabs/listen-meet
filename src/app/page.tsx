@@ -399,7 +399,10 @@ export default function Home() {
         filename: result.filename || `reuniao-${new Date().toISOString().split('T')[0]}.txt`
       }
 
-      MeetingStorage.saveMeeting(meetingRecord)
+      const saved = MeetingStorage.saveMeeting(meetingRecord)
+      if (!saved) {
+        alert(t.errors.saveMeetingFailure)
+      }
 
       setLastProcessedMeeting(meetingRecord)
       setShowProcessedMessage(true)

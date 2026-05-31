@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MeetingStorage } from '@/utils/storage'
 import Home from './page'
 
 vi.mock('@/components/AdvancedAudioRecorder', () => ({
@@ -114,6 +115,10 @@ describe('Home page studio shell', () => {
         ok: true,
         json: async () => modelsResponse,
       }))
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('shows active provider, model and key source in the studio header', async () => {
@@ -270,6 +275,46 @@ describe('Home page studio shell', () => {
         providerName: 'Google Gemini',
         modelName: 'Gemini Flash Latest',
       })
+    })
+  })
+
+  it('alerts when the processed meeting cannot be saved locally', async () => {
+    vi.mocked(fetch).mockReset()
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => providersResponse,
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => modelsResponse,
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          summary: {
+            title: 'Storage Full',
+            overview: 'The meeting was processed but local storage failed.',
+            keyPoints: ['Processed audio'],
+            actionItems: ['Free local storage'],
+            participants: ['Higor'],
+            topics: ['Storage'],
+          },
+          filename: 'meeting.txt',
+          duration: 125,
+        }),
+      } as Response)
+    vi.spyOn(MeetingStorage, 'saveMeeting').mockReturnValue(false)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined)
+
+    render(<Home />)
+
+    await screen.findByText('Estúdio de Gravação')
+    await userEvent.click(screen.getByRole('button', { name: /simular gravação completa/i }))
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Erro ao salvar reunião. O armazenamento local pode estar cheio.')
     })
   })
 

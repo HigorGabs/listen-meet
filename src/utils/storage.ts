@@ -10,7 +10,7 @@ export class MeetingStorage {
   private static STORAGE_KEY = 'listen-meet-recordings'
   private static MAX_RECORDINGS = 50
 
-  static saveMeeting(meeting: MeetingRecord): void {
+  static saveMeeting(meeting: MeetingRecord): boolean {
     try {
       const recordings = this.getAllMeetings()
       
@@ -29,9 +29,10 @@ export class MeetingStorage {
       }))
       
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(recordingsToStore))
-      
+      return true
     } catch (error) {
       console.error('Error saving meeting:', error)
+      return false
     }
   }
 

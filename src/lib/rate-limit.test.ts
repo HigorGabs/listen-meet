@@ -28,6 +28,20 @@ describe('rate limit', () => {
     expect(getClientIp(request)).toBe('unknown')
   })
 
+  it('uses a platform-provided request IP before considering proxy headers', () => {
+    const request = new Request('https://example.com', {
+      headers: {
+        'x-forwarded-for': '203.0.113.1, 198.51.100.2',
+      },
+    })
+    Object.defineProperty(request, 'ip', {
+      configurable: true,
+      value: '198.51.100.10',
+    })
+
+    expect(getClientIp(request)).toBe('198.51.100.10')
+  })
+
   it('extracts the first forwarded IP address only behind a trusted proxy', () => {
     process.env.LISTEN_MEET_TRUST_PROXY_HEADERS = 'true'
     const request = new Request('https://example.com', {
