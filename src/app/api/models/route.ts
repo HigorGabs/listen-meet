@@ -199,40 +199,30 @@ async function listOpenAiModels(apiKey: string): Promise<AiModelOption[]> {
 async function listAnthropicModels(apiKey: string): Promise<AiModelOption[]> {
   if (!apiKey) throw new ApiRouteError('API Key da Anthropic não configurada.', 400)
 
-  const response = await fetch('https://api.anthropic.com/v1/models?limit=1000', {
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+  // Anthropic does not support a general public /v1/models endpoint, so we return a static curated list of Claude models.
+  return [
+    {
+      id: 'claude-3-5-sonnet-latest',
+      name: 'Claude 3.5 Sonnet (Latest)',
+      provider: 'anthropic' as const,
+      category: 'text' as const,
+      description: 'Modelo de referência para raciocínio e codificação.',
     },
-    cache: 'no-store',
-  })
-
-  if (!response.ok) {
-    throw new ApiRouteError('Não foi possível listar modelos da Anthropic. Verifique a API key.', response.status)
-  }
-
-  const data = await response.json()
-
-  return (data.data || [])
-    .filter((model: { id: string }) => {
-      const id = model.id.toLowerCase()
-      return id.includes('claude')
-    })
-    .map((model: { id: string; display_name?: string; created_at?: string }) => {
-      const id = model.id.toLowerCase()
-      let category: 'audio' | 'text' | 'image' | 'other' = 'text'
-      if (id.includes('claude-3') || id.includes('claude-3-5')) {
-        category = 'image'
-      }
-      
-      return {
-        id: model.id,
-        name: model.display_name || model.id,
-        provider: 'anthropic' as const,
-        created: model.created_at,
-        category,
-      }
-    })
+    {
+      id: 'claude-3-5-haiku-latest',
+      name: 'Claude 3.5 Haiku (Latest)',
+      provider: 'anthropic' as const,
+      category: 'text' as const,
+      description: 'Modelo extremamente rápido para tarefas diárias.',
+    },
+    {
+      id: 'claude-3-opus-20240229',
+      name: 'Claude 3 Opus',
+      provider: 'anthropic' as const,
+      category: 'text' as const,
+      description: 'Modelo de alta qualidade para análise profunda.',
+    },
+  ]
 }
 
 async function listModels(provider: AiProviderId, apiKey: string): Promise<AiModelOption[]> {

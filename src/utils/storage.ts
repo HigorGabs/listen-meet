@@ -160,13 +160,13 @@ export class MeetingStorage {
       return new Promise<boolean>((resolve) => {
         tx.oncomplete = () => resolve(true)
         tx.onerror = () => {
-          console.error('IndexedDB put error:', tx.error)
-          resolve(false)
+          console.error('IndexedDB put error, falling back to localStorage:', tx.error)
+          resolve(this.saveMeetingLocalStorage(meeting))
         }
       })
     } catch (error) {
-      console.error('Error saving meeting in IndexedDB:', error)
-      return false
+      console.error('Error saving meeting in IndexedDB, falling back to localStorage:', error)
+      return this.saveMeetingLocalStorage(meeting)
     }
   }
 
@@ -193,10 +193,10 @@ export class MeetingStorage {
 
     try {
       const db = await this.getDB()
-      return this.getAllMeetingsFromDB(db)
+      return await this.getAllMeetingsFromDB(db)
     } catch (error) {
-      console.error('Error loading meetings from IndexedDB:', error)
-      return []
+      console.error('Error loading meetings from IndexedDB, falling back to localStorage:', error)
+      return this.getAllMeetingsLocalStorage()
     }
   }
 
@@ -210,16 +210,21 @@ export class MeetingStorage {
 
     try {
       const db = await this.getDB()
-      return new Promise((resolve, reject) => {
+      return await new Promise<MeetingRecord | null>((resolve) => {
         const tx = db.transaction(this.STORE_NAME, 'readonly')
         const store = tx.objectStore(this.STORE_NAME)
         const request = store.get(id)
         request.onsuccess = () => resolve(request.result || null)
-        request.onerror = () => reject(request.error)
+        request.onerror = () => {
+          console.warn('IndexedDB get error, falling back to localStorage:', request.error)
+          const meetings = this.getAllMeetingsLocalStorage()
+          resolve(meetings.find(m => m.id === id) || null)
+        }
       })
     } catch (error) {
-      console.error('Error loading meeting from IndexedDB:', error)
-      return null
+      console.error('Error loading meeting from IndexedDB, falling back to localStorage:', error)
+      const meetings = this.getAllMeetingsLocalStorage()
+      return meetings.find(m => m.id === id) || null
     }
   }
 
@@ -233,15 +238,20 @@ export class MeetingStorage {
 
     try {
       const db = await this.getDB()
-      return new Promise<void>((resolve, reject) => {
+      return await new Promise<void>((resolve) => {
         const tx = db.transaction(this.STORE_NAME, 'readwrite')
         const store = tx.objectStore(this.STORE_NAME)
         const request = store.delete(id)
         request.onsuccess = () => resolve()
-        request.onerror = () => reject(request.error)
+        request.onerror = () => {
+          console.warn('IndexedDB delete error, falling back to localStorage:', request.error)
+          this.deleteMeetingLocalStorage(id)
+          resolve()
+        }
       })
     } catch (error) {
-      console.error('Error deleting meeting from IndexedDB:', error)
+      console.error('Error deleting meeting from IndexedDB, falling back to localStorage:', error)
+      this.deleteMeetingLocalStorage(id)
     }
   }
 
@@ -305,7 +315,15 @@ export class MeetingStorage {
         sizeKB: Math.round(totalBytes / 1024)
       }
     } catch {
-      return { count: 0, sizeKB: 0 }
+      try {
+        const data = localStorage.getItem(this.STORAGE_KEY) || ''
+        return {
+          count: this.getAllMeetingsLocalStorage().length,
+          sizeKB: Math.round(new Blob([data]).size / 1024)
+        }
+      } catch {
+        return { count: 0, sizeKB: 0 }
+      }
     }
   }
 }

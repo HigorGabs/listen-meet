@@ -647,17 +647,28 @@ ${summary.timeline?.map(t => `- **${t.time} (${t.phase})**: ${t.description}`).j
     URL.revokeObjectURL(url)
   }
 
+  const escapeHtml = (text: string) => {
+    if (!text) return ''
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  }
+
   const handleDownloadHtml = (meeting: MeetingRecord) => {
     const { summary } = meeting
-    const title = meeting.title
-    const keyPointsHtml = summary.keyPoints.map(k => `<li>${k}</li>`).join('')
+    const title = escapeHtml(meeting.title)
+    const keyPointsHtml = summary.keyPoints.map(k => `<li>${escapeHtml(k)}</li>`).join('')
     const actionItemsHtml = summary.actionItems.map(a => {
       const { cleanAction, responsible } = parseActionResponsibility(a)
       return responsible 
-        ? `<li><span class="resp-badge">${responsible}</span> ${cleanAction}</li>`
-        : `<li>${cleanAction}</li>`
+        ? `<li><span class="resp-badge">${escapeHtml(responsible)}</span> ${escapeHtml(cleanAction)}</li>`
+        : `<li>${escapeHtml(cleanAction)}</li>`
     }).join('')
-    const participantsHtml = summary.participants.map(p => `<li>${p}</li>`).join('')
+    const participantsHtml = summary.participants.map(p => `<li>${escapeHtml(p)}</li>`).join('')
+    const overviewEscaped = escapeHtml(summary.summary || summary.overview).replace(/\n/g, '<br>')
     
     const html = `<!DOCTYPE html>
 <html lang="${locale}">
@@ -685,7 +696,7 @@ ${summary.timeline?.map(t => `- **${t.time} (${t.phase})**: ${t.description}`).j
   
   <h2>📝 Resumo Geral</h2>
   <div class="overview">
-    <p>${(summary.summary || summary.overview).replace(/\n/g, '<br>')}</p>
+    <p>${overviewEscaped}</p>
   </div>
 
   <h2>👥 Participantes</h2>
@@ -777,6 +788,7 @@ ${summary.actionItems.map(a => {
   }
 
   const handleSyncNotion = async () => {
+    if (!selectedMeeting) return
     if (!notionToken || !notionDb) {
       setConfirmModal({
         isOpen: true,
@@ -788,25 +800,51 @@ ${summary.actionItems.map(a => {
     }
 
     setIsSyncingNotion(true)
-    const logs = locale === 'en'
-      ? ['Connecting to Notion API...', 'Mapping database schema...', 'Creating new page...', 'Inserting summary details...', 'Sync complete!']
-      : ['Conectando com a API do Notion...', 'Mapeando propriedades do Database...', 'Criando nova página...', 'Inserindo detalhes do resumo...', 'Sincronização concluída!']
+    setSyncStatusNotion(locale === 'en' ? 'Connecting to Notion API...' : 'Conectando com a API do Notion...')
 
-    for (const log of logs) {
-      setSyncStatusNotion(log)
-      await new Promise(r => setTimeout(r, 600))
+    try {
+      const response = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type: 'notion',
+          payload: {
+            token: notionToken,
+            databaseId: notionDb,
+            meeting: selectedMeeting
+          }
+        })
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro na resposta do servidor proxy.')
+      }
+
+      setConfirmModal({
+        isOpen: true,
+        title: locale === 'en' ? 'Success' : 'Sucesso',
+        message: locale === 'en'
+          ? 'Meeting summary successfully synchronized to Notion!'
+          : 'Resumo da reunião sincronizado com sucesso no Notion!',
+        onConfirm: () => {}
+      })
+    } catch (err: any) {
+      console.error(err)
+      setConfirmModal({
+        isOpen: true,
+        title: locale === 'en' ? 'Error' : 'Erro',
+        message: locale === 'en'
+          ? `Failed to sync with Notion: ${err.message}`
+          : `Falha ao sincronizar com o Notion: ${err.message}`,
+        onConfirm: () => {}
+      })
+    } finally {
+      setIsSyncingNotion(false)
+      setSyncStatusNotion('')
     }
-
-    setIsSyncingNotion(false)
-    setSyncStatusNotion('')
-    setConfirmModal({
-      isOpen: true,
-      title: locale === 'en' ? 'Success' : 'Sucesso',
-      message: locale === 'en'
-        ? 'Meeting summary successfully synchronized to Notion!'
-        : 'Resumo da reunião sincronizado com sucesso no Notion!',
-      onConfirm: () => {}
-    })
   }
 
   const handleSyncSlack = async (meeting: MeetingRecord) => {
@@ -824,18 +862,23 @@ ${summary.actionItems.map(a => {
     setSyncStatusSlack(locale === 'en' ? 'Sending summary to Slack...' : 'Enviando resumo para o Slack...')
 
     try {
-      const isReal = slackWebhook.startsWith('https://hooks.slack.com/')
-      if (isReal) {
-        const payload = {
-          text: `*Listen Meet: ${meeting.title}* \n\n*Resumo:* \n${meeting.summary.summary || meeting.summary.overview} \n\n*Ações:* \n${meeting.summary.actionItems.map(a => `• ${a}`).join('\n')}`
-        }
-        await fetch(slackWebhook, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-          mode: 'no-cors'
+      const response = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type: 'slack',
+          payload: {
+            webhookUrl: slackWebhook,
+            meeting
+          }
         })
-      } else {
-        await new Promise(r => setTimeout(r, 1200))
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro na resposta do servidor proxy.')
       }
 
       setConfirmModal({
@@ -844,12 +887,14 @@ ${summary.actionItems.map(a => {
         message: locale === 'en' ? 'Meeting summary sent to Slack channel!' : 'Resumo da reunião enviado para o canal do Slack!',
         onConfirm: () => {}
       })
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
       setConfirmModal({
         isOpen: true,
         title: locale === 'en' ? 'Error' : 'Erro',
-        message: locale === 'en' ? 'Failed to send to Slack webhook.' : 'Falha ao enviar para o webhook do Slack.',
+        message: locale === 'en'
+          ? `Failed to send to Slack: ${err.message}`
+          : `Falha ao enviar para o Slack: ${err.message}`,
         onConfirm: () => {}
       })
     } finally {
@@ -870,26 +915,53 @@ ${summary.actionItems.map(a => {
     }
 
     setIsSyncingJira(true)
-    const totalActions = meeting.summary.actionItems.length
-    const logs = locale === 'en'
-      ? ['Connecting to Jira Cloud...', `Creating ${totalActions} issues...`, 'Linking to meeting log...', 'Sync complete!']
-      : ['Conectando com o Jira Cloud...', `Criando ${totalActions} tarefas...`, 'Vinculando referências da reunião...', 'Sincronização concluída!']
+    setSyncStatusJira(locale === 'en' ? 'Connecting to Jira Cloud...' : 'Conectando com o Jira Cloud...')
 
-    for (const log of logs) {
-      setSyncStatusJira(log)
-      await new Promise(r => setTimeout(r, 600))
+    try {
+      const response = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type: 'jira',
+          payload: {
+            domain: jiraDomain,
+            projectKey: jiraKey,
+            token: jiraToken,
+            meeting
+          }
+        })
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro na resposta do servidor proxy.')
+      }
+
+      const totalActions = meeting.summary.actionItems.length
+      setConfirmModal({
+        isOpen: true,
+        title: locale === 'en' ? 'Jira Synced' : 'Jira Sincronizado',
+        message: locale === 'en'
+          ? `Successfully created ${totalActions} tasks in Jira under project ${jiraKey}!`
+          : `Sucesso! Criadas ${totalActions} tarefas no Jira sob o projeto ${jiraKey}!`,
+        onConfirm: () => {}
+      })
+    } catch (err: any) {
+      console.error(err)
+      setConfirmModal({
+        isOpen: true,
+        title: locale === 'en' ? 'Error' : 'Erro',
+        message: locale === 'en'
+          ? `Failed to sync with Jira: ${err.message}`
+          : `Falha ao sincronizar com o Jira: ${err.message}`,
+        onConfirm: () => {}
+      })
+    } finally {
+      setIsSyncingJira(false)
+      setSyncStatusJira('')
     }
-
-    setIsSyncingJira(false)
-    setSyncStatusJira('')
-    setConfirmModal({
-      isOpen: true,
-      title: locale === 'en' ? 'Jira Synced' : 'Jira Sincronizado',
-      message: locale === 'en'
-        ? `Successfully created ${totalActions} tasks in Jira under project ${jiraKey}!`
-        : `Sucesso! Criadas ${totalActions} tarefas no Jira sob o projeto ${jiraKey}!`,
-      onConfirm: () => {}
-    })
   }
 
   const formatDuration = (seconds: number) => {

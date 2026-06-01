@@ -325,7 +325,7 @@ async function generateWithGeminiFallback(
   audio: { mimeType: string; data: string },
   prompt: string,
   selectedModel?: string
-): Promise<string> {
+): Promise<{ text: string; usedModel: string }> {
   let lastError: unknown
 
   for (const modelName of getGeminiFallbackModels(selectedModel)) {
@@ -340,7 +340,42 @@ async function generateWithGeminiFallback(
           { text: prompt },
         ])
 
-        return result.response.text()
+        return { text: result.response.text(), usedModel: modelName }
+      } catch (error) {
+        lastError = error
+
+        if (isProviderAuthError(error)) {
+          throw error
+        }
+
+        if (isModelUnavailableError(error)) {
+          break
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)))
+      }
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Gemini unavailable')
+}
+
+async function generateTextWithGeminiFallback(
+  genAI: GoogleGenerativeAI,
+  prompt: string,
+  selectedModel?: string
+): Promise<{ text: string; usedModel: string }> {
+  let lastError: unknown
+
+  for (const modelName of getGeminiFallbackModels(selectedModel)) {
+    const model = genAI.getGenerativeModel({ model: modelName })
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const result = await model.generateContent(prompt)
+        return { text: result.response.text(), usedModel: modelName }
       } catch (error) {
         lastError = error
 
@@ -375,7 +410,7 @@ async function generateWithOpenRouter(
         { type: 'text', text: prompt },
         {
           type: 'input_audio',
-          inputAudio: {
+          input_audio: {
             data: audio.data,
             format: audio.format,
           },
@@ -542,25 +577,47 @@ export async function POST(request: NextRequest) {
     if (processingMode === 'text') {
       // 1. literal transcription pass
       const transPrompt = "Transcreva o áudio literal completo. Responda apenas com a transcrição pura e literal do áudio da reunião, sem introduções, resumos, explicações ou formatação JSON."
-      const rawTranscript = provider === 'gemini'
-        ? await generateWithGeminiFallback(
-            new GoogleGenerativeAI(apiKey),
-            {
-              mimeType: getAudioMimeType(audioFile.name, audioFile.type),
-              data: audioBase64
-            },
-            transPrompt,
-            model
-          )
-        : await generateWithOpenRouter(
-            apiKey,
-            model,
-            {
-              data: audioBase64,
-              format: getAudioFormat(audioFile.name, audioFile.type),
-            },
-            transPrompt
-          )
+      let rawTranscript = ''
+      let usedModel = model
+
+      if (provider === 'gemini') {
+        const geminiResult = await generateWithGeminiFallback(
+          new GoogleGenerativeAI(apiKey),
+          {
+            mimeType: getAudioMimeType(audioFile.name, audioFile.type),
+            data: audioBase64
+          },
+          transPrompt,
+          model
+        )
+        rawTranscript = geminiResult.text
+        usedModel = geminiResult.usedModel
+      } else {
+        // Avoid sending audio to text-only OpenRouter models by using Whisper as transcription model
+        let transcriptionModel = model
+        const lowerModel = model.toLowerCase()
+        const isAudioCapable = 
+          lowerModel.includes('whisper') || 
+          lowerModel.includes('gemini-1.5') || 
+          lowerModel.includes('gemini-2.0') || 
+          lowerModel.includes('gemini-2.5') || 
+          lowerModel.includes('gemini-flash') ||
+          lowerModel.includes('gemini-pro')
+        
+        if (!isAudioCapable) {
+          transcriptionModel = 'openai/whisper-large-v3'
+        }
+
+        rawTranscript = await generateWithOpenRouter(
+          apiKey,
+          transcriptionModel,
+          {
+            data: audioBase64,
+            format: getAudioFormat(audioFile.name, audioFile.type),
+          },
+          transPrompt
+        )
+      }
 
       // 2. text-only structured analysis pass
       const finalPrompt = buildMeetingPrompt(
@@ -577,10 +634,8 @@ export async function POST(request: NextRequest) {
       )
       if (provider === 'gemini') {
         const genAI = new GoogleGenerativeAI(apiKey)
-        const activeModelName = model || getGeminiFallbackModels(model)[0]
-        const generativeModel = genAI.getGenerativeModel({ model: activeModelName })
-        const result = await generativeModel.generateContent(finalPrompt)
-        text = result.response.text()
+        const geminiResult = await generateTextWithGeminiFallback(genAI, finalPrompt, usedModel)
+        text = geminiResult.text
       } else {
         text = await generateWithOpenRouter(
           apiKey,
@@ -603,25 +658,28 @@ export async function POST(request: NextRequest) {
         userProfile,
         collaborators
       )
-      text = provider === 'gemini'
-        ? await generateWithGeminiFallback(
-            new GoogleGenerativeAI(apiKey),
-            {
-              mimeType: getAudioMimeType(audioFile.name, audioFile.type),
-              data: audioBase64
-            },
-            prompt,
-            model
-          )
-        : await generateWithOpenRouter(
-            apiKey,
-            model,
-            {
-              data: audioBase64,
-              format: getAudioFormat(audioFile.name, audioFile.type),
-            },
-            prompt
-          )
+      if (provider === 'gemini') {
+        const geminiResult = await generateWithGeminiFallback(
+          new GoogleGenerativeAI(apiKey),
+          {
+            mimeType: getAudioMimeType(audioFile.name, audioFile.type),
+            data: audioBase64
+          },
+          prompt,
+          model
+        )
+        text = geminiResult.text
+      } else {
+        text = await generateWithOpenRouter(
+          apiKey,
+          model,
+          {
+            data: audioBase64,
+            format: getAudioFormat(audioFile.name, audioFile.type),
+          },
+          prompt
+        )
+      }
     }
 
     const summary = parseMeetingSummary(text)

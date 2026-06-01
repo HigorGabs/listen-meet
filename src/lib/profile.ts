@@ -49,15 +49,16 @@ export function getProfile(): UserProfile {
   try {
     const stored = localStorage.getItem(PROFILE_STORAGE_KEY)
     if (stored) {
-      const parsed = JSON.parse(stored) as UserProfile
-      
-      // Ensure arrays and objects exist in loaded profile
-      return {
-        ...DEFAULT_PROFILE,
-        ...parsed,
-        rolesByCompany: parsed.rolesByCompany || {},
-        companies: parsed.companies || ['Listen'],
-        collaborators: parsed.collaborators || [],
+      const parsed = JSON.parse(stored)
+      if (parsed && typeof parsed === 'object') {
+        // Ensure arrays and objects exist in loaded profile
+        return {
+          ...DEFAULT_PROFILE,
+          ...parsed,
+          rolesByCompany: parsed.rolesByCompany || {},
+          companies: parsed.companies || ['Listen'],
+          collaborators: parsed.collaborators || [],
+        }
       }
     }
 

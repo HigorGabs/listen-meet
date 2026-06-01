@@ -489,8 +489,13 @@ async function compressAudioFile(file: File): Promise<File> {
     throw new Error('Web Audio API not supported in this browser.')
   }
   const audioCtx = new AudioContextClass()
-  const arrayBuffer = await file.arrayBuffer()
-  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+  let audioBuffer: AudioBuffer
+  try {
+    const arrayBuffer = await file.arrayBuffer()
+    audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+  } finally {
+    await audioCtx.close()
+  }
   
   // Downsample to 16kHz mono (or 8kHz for longer meetings)
   const targetSampleRate = audioBuffer.duration > 2700 ? 8000 : 16000
