@@ -979,6 +979,16 @@ ${summary.actionItems.map(a => {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  const formatDashboardTime = (seconds: number) => {
+    const minsTotal = Math.round(seconds / 60)
+    const hours = Math.floor(minsTotal / 60)
+    const mins = minsTotal % 60
+    if (hours > 0) {
+      return `${hours}h ${mins}m`
+    }
+    return `${mins}m`
+  }
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     const isToday = date.toDateString() === referenceDate.toDateString()
@@ -1133,6 +1143,100 @@ ${summary.actionItems.map(a => {
     })
     return Object.entries(stats).map(([name, value]) => ({ name, value }))
   }, [meetings, selectedCompanyFilter, locale])
+
+  const weeklyTimeStats = useMemo(() => {
+    const stats: Array<{
+      label: string
+      dateStr: string
+      productive: number
+      unproductive: number
+      total: number
+    }> = []
+    const now = new Date()
+    
+    // We go from 6 days ago (index 0) to today (index 6)
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
+      const dayOfWeek = d.getDay() // 0 = Sunday, 1 = Monday, etc.
+      
+      let label = ''
+      if (locale === 'en') {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        label = days[dayOfWeek]
+      } else {
+        const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+        label = days[dayOfWeek]
+      }
+      
+      stats.push({
+        label,
+        dateStr: d.toDateString(),
+        productive: 0,   // in seconds
+        unproductive: 0, // in seconds
+        total: 0,        // in seconds
+      })
+    }
+    
+    // Filter meetings from the last 7 days
+    const sixDaysAgo = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000)
+    sixDaysAgo.setHours(0, 0, 0, 0)
+    
+    dashboardMeetings.forEach(meeting => {
+      const mDate = new Date(meeting.date)
+      if (mDate >= sixDaysAgo) {
+        const dateStr = mDate.toDateString()
+        const statItem = stats.find(item => item.dateStr === dateStr)
+        
+        if (statItem) {
+          // Parse efficiency
+          let efficiency = 80 // default
+          if (meeting.summary.metrics?.efficiency) {
+            const parsed = parseInt(meeting.summary.metrics.efficiency)
+            if (!isNaN(parsed)) {
+              efficiency = parsed
+            }
+          }
+          
+          const prod = meeting.duration * (efficiency / 100)
+          const unprod = meeting.duration * (1 - efficiency / 100)
+          
+          statItem.productive += prod
+          statItem.unproductive += unprod
+          statItem.total += meeting.duration
+        }
+      }
+    })
+    
+    return stats
+  }, [dashboardMeetings, locale])
+
+  // Total productive/unproductive time across all filtered meetings
+  const timeTotals = useMemo(() => {
+    let totalProd = 0
+    let totalUnprod = 0
+    
+    dashboardMeetings.forEach(meeting => {
+      let efficiency = 80 // default
+      if (meeting.summary.metrics?.efficiency) {
+        const parsed = parseInt(meeting.summary.metrics.efficiency)
+        if (!isNaN(parsed)) {
+          efficiency = parsed
+        }
+      }
+      
+      const prod = meeting.duration * (efficiency / 100)
+      const unprod = meeting.duration * (1 - efficiency / 100)
+      
+      totalProd += prod
+      totalUnprod += unprod
+    })
+    
+    return {
+      productive: totalProd,
+      unproductive: totalUnprod,
+      total: totalProd + totalUnprod
+    }
+  }, [dashboardMeetings])
 
   // Custom categorizations (Daily and 1:1 detectors)
   const meetingType = selectedMeeting?.summary.tags?.meetingType || ''
@@ -1399,7 +1503,129 @@ ${summary.actionItems.map(a => {
               )}
             </article>
 
-            {/* SVG Charts section */}
+            {/* Weekly Time Analysis section */}
+            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--studio-border)] pb-3">
+                <div className="flex items-center gap-2">
+                  <MaterialIcon name="pending_actions" className="text-base text-[var(--studio-primary)]" />
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--studio-text)]">
+                    {locale === 'en' ? 'Weekly Time Spent' : 'Tempo de Reuniões na Semana'}
+                  </h3>
+                </div>
+                <span className="rounded-full bg-[var(--studio-primary-soft)] border border-[var(--studio-primary-border)] px-2 py-0.5 text-xs text-[var(--studio-primary)] font-semibold">
+                  {locale === 'en' ? 'Last 7 Days' : 'Últimos 7 Dias'}
+                </span>
+              </div>
+
+              <div className="space-y-4">
+                {/* Total Stats comparative bar */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      {locale === 'en' ? 'Productive:' : 'Produtivo:'}{' '}
+                      {formatDashboardTime(timeTotals.productive)} ({timeTotals.total > 0 ? Math.round((timeTotals.productive / timeTotals.total) * 100) : 0}%)
+                    </span>
+                    <span className="text-red-400 font-semibold flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-red-500" />
+                      {locale === 'en' ? 'Unproductive:' : 'Improdutivo:'}{' '}
+                      {formatDashboardTime(timeTotals.unproductive)} ({timeTotals.total > 0 ? Math.round((timeTotals.unproductive / timeTotals.total) * 100) : 0}%)
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full bg-[var(--studio-panel-strong)] rounded-full overflow-hidden border border-[color:var(--studio-border)]/50 flex">
+                    {timeTotals.total > 0 ? (
+                      <>
+                        <div 
+                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500"
+                          style={{ width: `${(timeTotals.productive / timeTotals.total) * 100}%` }}
+                        />
+                        <div 
+                          className="h-full bg-gradient-to-r from-red-500 to-amber-500 transition-all duration-500"
+                          style={{ width: `${(timeTotals.unproductive / timeTotals.total) * 100}%` }}
+                        />
+                      </>
+                    ) : (
+                      <div className="h-full w-full bg-zinc-800 opacity-40" />
+                    )}
+                  </div>
+                </div>
+
+                {/* Day-by-day vertical bars */}
+                <div className="relative pt-4">
+                  {/* Grid Lines for reference (Y Axis) */}
+                  <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8 pt-2 opacity-5">
+                    <div className="border-t border-dashed border-white w-full" />
+                    <div className="border-t border-dashed border-white w-full" />
+                    <div className="border-t border-dashed border-white w-full" />
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-2 items-end h-32 relative z-10">
+                    {(() => {
+                      const maxDayTotal = Math.max(...weeklyTimeStats.map(s => s.total), 1)
+                      return weeklyTimeStats.map((stat, idx) => {
+                        const hasMeetings = stat.total > 0
+                        const pctProd = hasMeetings ? (stat.productive / stat.total) * 100 : 0
+                        const pctUnprod = hasMeetings ? (stat.unproductive / stat.total) * 100 : 0
+                        
+                        return (
+                          <div key={idx} className="flex flex-col items-center gap-1.5 h-full justify-end cursor-pointer group relative">
+                            {/* Detailed Day Tooltip */}
+                            <div className="absolute bottom-full mb-2 hidden group-hover:block z-20 w-44 bg-[var(--studio-panel-strong)] border border-[color:var(--studio-border)] rounded-lg p-2.5 text-[10px] text-[var(--studio-text)] shadow-xl leading-relaxed">
+                              <p className="font-bold text-zinc-200 border-b border-[color:var(--studio-border)] pb-1 mb-1.5">{stat.label} ({stat.dateStr})</p>
+                              <p className="text-emerald-400 flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                {locale === 'en' ? 'Productive:' : 'Produtivo:'} <strong>{formatDashboardTime(stat.productive)}</strong>
+                              </p>
+                              <p className="text-red-400 flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                                {locale === 'en' ? 'Unproductive:' : 'Improdutivo:'} <strong>{formatDashboardTime(stat.unproductive)}</strong>
+                              </p>
+                              <p className="mt-1 border-t border-[color:var(--studio-border)]/50 pt-1 font-extrabold text-[var(--studio-secondary)] flex justify-between">
+                                <span>Total:</span>
+                                <span>{formatDashboardTime(stat.total)}</span>
+                              </p>
+                            </div>
+
+                            {/* Column Stacked Bar */}
+                            <div className="w-full flex-1 flex flex-col justify-end">
+                              {hasMeetings ? (
+                                <div 
+                                  className="w-full bg-[var(--studio-panel-strong)] rounded-t-md flex flex-col overflow-hidden border border-[color:var(--studio-border)]/50 group-hover:border-[var(--studio-primary-border)] transition-all"
+                                  style={{ height: `${(stat.total / maxDayTotal) * 100}%` }}
+                                >
+                                  {/* Unproductive at top */}
+                                  <div 
+                                    className="w-full bg-gradient-to-b from-red-500/80 to-amber-500/80" 
+                                    style={{ height: `${pctUnprod}%` }}
+                                  />
+                                  {/* Productive at bottom */}
+                                  <div 
+                                    className="w-full bg-gradient-to-b from-emerald-500 to-teal-400" 
+                                    style={{ height: `${pctProd}%` }}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="h-1.5 w-1.5 rounded-full bg-zinc-800 opacity-40 mx-auto" />
+                              )}
+                            </div>
+
+                            {/* Label */}
+                            <span className="text-[10px] font-bold text-[var(--studio-muted)] group-hover:text-[var(--studio-text)] transition-colors select-none">
+                              {stat.label}
+                            </span>
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          {/* Row 2: Categories and Quality/Hot Topics */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Meeting Categories */}
             <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow">
               <div className="mb-4 flex items-center justify-between border-b border-[color:var(--studio-border)] pb-3">
                 <div className="flex items-center gap-2">
@@ -1453,7 +1679,7 @@ ${summary.actionItems.map(a => {
                     </h4>
                     <p className="text-xs text-[var(--studio-muted)] leading-relaxed">
                       {locale === 'en' 
-                        ? `You have a rich focus on ${meetingTypeStats[0]?.name || 'Geral'} meetings. The average meeting efficiency sits at a strong ${averageEfficiency || 'N/A'}. A total of ${totalDecisions} decisions were taken across all recorded sessions.` 
+                        ? `You have a rich focus on ${meetingTypeStats[0]?.name || 'General'} meetings. The average meeting efficiency sits at a strong ${averageEfficiency || 'N/A'}. A total of ${totalDecisions} decisions were taken across all recorded sessions.` 
                         : `Foco predominante em reuniões do tipo "${meetingTypeStats[0]?.name || 'Geral'}". A eficiência geral média das suas interações está em ${averageEfficiency || 'N/A'}. Mantenha as discussões focadas para reduzir o tempo total de gravação.`
                       }
                     </p>
@@ -1461,96 +1687,94 @@ ${summary.actionItems.map(a => {
                 </div>
               )}
             </article>
-          </div>
 
-          {/* Quality & Hot Topics Panel */}
-          <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow">
-            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--studio-border)] pb-3">
-              <div className="flex items-center gap-2">
-                <MaterialIcon name="analytics" className="text-base text-[var(--studio-secondary)]" />
-                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--studio-text)]">
-                  {locale === 'en' ? 'Quality Index & Hot Topics' : 'Índice de Qualidade e Tópicos Quentes'}
-                </h3>
-              </div>
-            </div>
-            
-            <div className="grid gap-6 md:grid-cols-3 items-center">
-              {/* Average Quality Gauge */}
-              <div className="flex flex-col items-center justify-center text-center p-4 border border-[color:var(--studio-border)]/40 rounded-lg bg-[var(--studio-panel)]/30">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--studio-subtle)] mb-3">
-                  {locale === 'en' ? 'Average Quality Index' : 'Média de Qualidade'}
-                </span>
-                
-                <div className="relative flex items-center justify-center h-28 w-28">
-                  <svg className="absolute transform -rotate-90 w-full h-full" viewBox="0 0 100 100">
-                    <circle 
-                      cx="50" cy="50" r="40" 
-                      stroke="rgba(15,23,42,0.06)" strokeWidth="8" fill="transparent" 
-                      className="dark:stroke-white/5"
-                    />
-                    <circle 
-                      cx="50" cy="50" r="40" 
-                      stroke="var(--studio-secondary)" strokeWidth="8" fill="transparent" 
-                      strokeDasharray={`${2 * Math.PI * 40}`}
-                      strokeDashoffset={`${2 * Math.PI * 40 * (1 - (parseInt(averageQuality || '75') / 100))}`}
-                      className="transition-all duration-1000"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div className="text-xl font-bold font-mono text-[var(--studio-text)]">
-                    {averageQuality || '75%'}
-                  </div>
+            {/* Quality & Hot Topics Panel */}
+            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow">
+              <div className="mb-4 flex items-center justify-between border-b border-[color:var(--studio-border)] pb-3">
+                <div className="flex items-center gap-2">
+                  <MaterialIcon name="analytics" className="text-base text-[var(--studio-secondary)]" />
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--studio-text)]">
+                    {locale === 'en' ? 'Quality Index & Hot Topics' : 'Índice de Qualidade e Tópicos Quentes'}
+                  </h3>
                 </div>
-                <p className="text-[10px] text-[var(--studio-subtle)] mt-3">
-                  {locale === 'en' 
-                    ? 'Aggregate meeting quality score' 
-                    : 'Média de clareza e foco das sessões'}
-                </p>
               </div>
-
-              {/* Hot Topics Tag Cloud */}
-              <div className="md:col-span-2 space-y-3">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--studio-subtle)]">
-                  {locale === 'en' ? 'Most Discussed Topics' : 'Nuvem de Tópicos Recorrentes'}
-                </h4>
-                {hotTopics.length === 0 ? (
-                  <p className="text-xs text-[var(--studio-muted)] italic">
-                    {locale === 'en' ? 'No topics analyzed yet.' : 'Nenhum tópico analisado ainda.'}
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2.5 p-3 rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)]/20 min-h-[120px] items-center content-center">
-                    {hotTopics.map((topic, idx) => {
-                      const sizes = ['text-sm font-semibold px-3 py-1.5', 'text-xs font-medium px-2.5 py-1', 'text-[11px] px-2 py-0.5']
-                      const sizeClass = idx < 2 ? sizes[0] : idx < 5 ? sizes[1] : sizes[2]
-                      const variantColors = [
-                        'bg-[var(--studio-primary-soft)] border-[var(--studio-primary-border)] text-[var(--studio-primary)] shadow-glow-primary',
-                        'bg-[var(--studio-secondary-soft)] border-[var(--studio-secondary-border)] text-[var(--studio-secondary)] shadow-glow-secondary',
-                        'bg-cyan-500/5 border-cyan-500/20 text-cyan-400',
-                        'bg-amber-500/5 border-amber-500/20 text-amber-400',
-                        'bg-zinc-500/5 border-zinc-500/20 text-[var(--studio-text)]'
-                      ]
-                      const colorClass = variantColors[idx % variantColors.length]
-                      
-                      return (
-                        <span 
-                          key={topic.name} 
-                          className={cn(
-                            "rounded-lg border transition-all duration-300 hover:scale-105 select-none",
-                            sizeClass,
-                            colorClass
-                          )}
-                          title={`${topic.count} ${topic.count === 1 ? 'mencionada' : 'mencionadas'}`}
-                        >
-                          {topic.name}
-                          <span className="ml-1.5 font-mono text-[9px] opacity-65">({topic.count})</span>
-                        </span>
-                      )
-                    })}
+              
+              <div className="grid gap-5 sm:grid-cols-[120px_1fr] items-center">
+                {/* Average Quality Gauge */}
+                <div className="flex flex-col items-center justify-center text-center p-3 border border-[color:var(--studio-border)]/40 rounded-lg bg-[var(--studio-panel)]/30">
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--studio-subtle)] mb-2.5">
+                    {locale === 'en' ? 'Quality' : 'Qualidade'}
+                  </span>
+                  
+                  <div className="relative flex items-center justify-center h-20 w-20">
+                    <svg className="absolute transform -rotate-90 w-full h-full" viewBox="0 0 100 100">
+                      <circle 
+                        cx="50" cy="50" r="40" 
+                        stroke="rgba(15,23,42,0.06)" strokeWidth="8" fill="transparent" 
+                        className="dark:stroke-white/5"
+                      />
+                      <circle 
+                        cx="50" cy="50" r="40" 
+                        stroke="var(--studio-secondary)" strokeWidth="8" fill="transparent" 
+                        strokeDasharray={`${2 * Math.PI * 40}`}
+                        strokeDashoffset={`${2 * Math.PI * 40 * (1 - (parseInt(averageQuality || '75') / 100))}`}
+                        className="transition-all duration-1000"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="text-base font-bold font-mono text-[var(--studio-text)]">
+                      {averageQuality || '75%'}
+                    </div>
                   </div>
-                )}
+                  <p className="text-[8px] text-[var(--studio-subtle)] mt-2 leading-tight">
+                    {locale === 'en' ? 'Avg Quality' : 'Média Geral'}
+                  </p>
+                </div>
+
+                {/* Hot Topics Tag Cloud */}
+                <div className="space-y-2.5">
+                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--studio-subtle)]">
+                    {locale === 'en' ? 'Most Discussed Topics' : 'Nuvem de Tópicos Recorrentes'}
+                  </h4>
+                  {hotTopics.length === 0 ? (
+                    <p className="text-xs text-[var(--studio-muted)] italic">
+                      {locale === 'en' ? 'No topics analyzed yet.' : 'Nenhum tópico analisado ainda.'}
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 p-2.5 rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)]/20 min-h-[90px] items-center content-center">
+                      {hotTopics.slice(0, 10).map((topic, idx) => {
+                        const sizes = ['text-xs font-semibold px-2 py-1', 'text-[11px] font-medium px-1.5 py-0.5', 'text-[10px] px-1 py-0.5']
+                        const sizeClass = idx < 2 ? sizes[0] : idx < 5 ? sizes[1] : sizes[2]
+                        const variantColors = [
+                          'bg-[var(--studio-primary-soft)] border-[var(--studio-primary-border)] text-[var(--studio-primary)] shadow-glow-primary',
+                          'bg-[var(--studio-secondary-soft)] border-[var(--studio-secondary-border)] text-[var(--studio-secondary)] shadow-glow-secondary',
+                          'bg-cyan-500/5 border-cyan-500/20 text-cyan-400',
+                          'bg-amber-500/5 border-amber-500/20 text-amber-400',
+                          'bg-zinc-500/5 border-zinc-500/20 text-[var(--studio-text)]'
+                        ]
+                        const colorClass = variantColors[idx % variantColors.length]
+                        
+                        return (
+                          <span 
+                            key={topic.name} 
+                            className={cn(
+                              "rounded border transition-all duration-300 hover:scale-105 select-none",
+                              sizeClass,
+                              colorClass
+                            )}
+                            title={`${topic.count} ${topic.count === 1 ? 'mencionada' : 'mencionadas'}`}
+                          >
+                            {topic.name}
+                            <span className="ml-1 font-mono text-[8px] opacity-65">({topic.count})</span>
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          </article>
+            </article>
+          </div>
         </div>
       ) : (
         /* RENDER VIEW MODE: READER (LIST + DETAIL TAB PANEL) */
