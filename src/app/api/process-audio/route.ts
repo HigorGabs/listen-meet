@@ -537,9 +537,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (provider !== 'gemini' && provider !== 'openrouter') {
+    if (provider !== 'gemini' && provider !== 'openrouter' && provider !== 'openai' && provider !== 'anthropic') {
       return NextResponse.json(
-        { error: 'Processamento de áudio direto está disponível para Gemini e OpenRouter nesta versão.' },
+        { error: 'Provedor não suportado para processamento de áudio nesta versão.' },
         { status: 400 }
       )
     }
@@ -580,7 +580,7 @@ export async function POST(request: NextRequest) {
     const audioBase64 = Buffer.from(audioBuffer).toString('base64')
     let text = ''
 
-    if (processingMode === 'text') {
+    if (processingMode === 'text' || provider === 'openai' || provider === 'anthropic') {
       // 1. literal transcription pass
       const transPrompt = "Transcreva o áudio literal completo. Responda apenas com a transcrição pura e literal do áudio da reunião, sem introduções, resumos, explicações ou formatação JSON."
       let rawTranscript = ''
@@ -598,6 +598,41 @@ export async function POST(request: NextRequest) {
         )
         rawTranscript = geminiResult.text
         usedModel = geminiResult.usedModel
+      } else if (provider === 'openai') {
+        rawTranscript = await transcribeWithOpenAIWhisper(apiKey, audioBuffer, audioFile.name, audioFile.type)
+      } else if (provider === 'anthropic') {
+        // Fallback keys in environment for Speech-to-Text
+        const fallbackOpenAiKey = process.env.OPENAI_API_KEY?.trim()
+        const fallbackOpenRouterKey = process.env.OPENROUTER_API_KEY?.trim()
+        const fallbackGeminiKey = process.env.GEMINI_API_KEY?.trim()
+
+        if (fallbackOpenAiKey) {
+          rawTranscript = await transcribeWithOpenAIWhisper(fallbackOpenAiKey, audioBuffer, audioFile.name, audioFile.type)
+        } else if (fallbackOpenRouterKey) {
+          rawTranscript = await generateWithOpenRouter(
+            fallbackOpenRouterKey,
+            'openai/whisper-large-v3',
+            {
+              data: audioBase64,
+              format: getAudioFormat(audioFile.name, audioFile.type),
+            },
+            transPrompt
+          )
+        } else if (fallbackGeminiKey) {
+          const genAI = new GoogleGenerativeAI(fallbackGeminiKey)
+          const result = await generateWithGeminiFallback(
+            genAI,
+            {
+              mimeType: getAudioMimeType(audioFile.name, audioFile.type),
+              data: audioBase64,
+            },
+            transPrompt,
+            'gemini-2.5-flash'
+          )
+          rawTranscript = result.text
+        } else {
+          throw new Error('Para processar áudio com a Anthropic diretamente, configure uma API Key da OpenAI, Gemini ou OpenRouter no servidor para realizar a transcrição prévia.')
+        }
       } else {
         // Avoid sending audio to text-only OpenRouter models by using Whisper as transcription model
         let transcriptionModel = model
@@ -642,6 +677,10 @@ export async function POST(request: NextRequest) {
         const genAI = new GoogleGenerativeAI(apiKey)
         const geminiResult = await generateTextWithGeminiFallback(genAI, finalPrompt, usedModel)
         text = geminiResult.text
+      } else if (provider === 'openai') {
+        text = await generateWithOpenAIChat(apiKey, model, finalPrompt)
+      } else if (provider === 'anthropic') {
+        text = await generateWithAnthropic(apiKey, model, finalPrompt)
       } else {
         text = await generateWithOpenRouter(
           apiKey,
@@ -651,7 +690,7 @@ export async function POST(request: NextRequest) {
         )
       }
     } else {
-      // Multimodal mode: Full audio direct pass
+      // Multimodal mode: Full audio direct pass (only gemini and openrouter)
       const prompt = buildMeetingPrompt(
         locale,
         duration,
@@ -721,4 +760,110 @@ export async function POST(request: NextRequest) {
       fallback: true
     }, { status: publicError.status })
   }
+}
+
+async function transcribeWithOpenAIWhisper(
+  apiKey: string,
+  audioBuffer: ArrayBuffer,
+  filename: string,
+  mimeType: string
+): Promise<string> {
+  const formData = new FormData()
+  const audioBlob = new Blob([audioBuffer], { type: mimeType })
+  formData.append('file', audioBlob, filename)
+  formData.append('model', 'whisper-1')
+
+  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(
+      typeof errorData.error === 'object' && errorData.error?.message
+        ? errorData.error.message
+        : 'Erro na transcrição via OpenAI Whisper. Verifique a chave de API.'
+    )
+  }
+
+  const result = await response.json()
+  return result.text || ''
+}
+
+async function generateWithOpenAIChat(
+  apiKey: string,
+  model: string,
+  prompt: string
+): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: model || 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      temperature: 0.1,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(
+      typeof errorData.error === 'object' && errorData.error?.message
+        ? errorData.error.message
+        : 'Erro ao gerar análise com OpenAI Chat.'
+    )
+  }
+
+  const result = await response.json()
+  return result.choices?.[0]?.message?.content || ''
+}
+
+async function generateWithAnthropic(
+  apiKey: string,
+  model: string,
+  prompt: string
+): Promise<string> {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: model || 'claude-3-5-sonnet-20241022',
+      max_tokens: 4000,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      temperature: 0.1,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(
+      typeof errorData.error === 'object' && errorData.error?.message
+        ? errorData.error.message
+        : 'Erro ao gerar análise com Anthropic.'
+    )
+  }
+
+  const result = await response.json()
+  return result.content?.[0]?.text || ''
 }

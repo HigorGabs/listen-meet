@@ -89,6 +89,7 @@ export const messages = {
       modelErrorTitle: 'Erro ao carregar modelos',
       useConfig: 'Usar configuração',
       serverConfigured: 'servidor configurado',
+      showOnlyFreeModels: 'Exibir apenas modelos gratuitos',
     },
     recorder: {
       readyToRecord: 'Pronto para gravar',
@@ -380,6 +381,7 @@ export const messages = {
       modelErrorTitle: 'Error loading models',
       useConfig: 'Use configuration',
       serverConfigured: 'server configured',
+      showOnlyFreeModels: 'Show only free models',
     },
     recorder: {
       readyToRecord: 'Ready to record',

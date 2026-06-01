@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { AdvancedAudioRecorder, type AudioCaptureReadiness } from '@/components/AdvancedAudioRecorder'
 import { MeetingsList } from '@/components/MeetingsList'
 import { SessionReadinessPanel } from '@/components/SessionReadinessPanel'
@@ -150,6 +150,26 @@ export default function Home() {
   const [selectedModel, setSelectedModel] = useState('')
   const [isLoadingModels, setIsLoadingModels] = useState(false)
   const [modelError, setModelError] = useState('')
+  const [showOnlyFreeModels, setShowOnlyFreeModels] = useState(false)
+
+  const filteredModels = useMemo(() => {
+    if (provider === 'openrouter' && showOnlyFreeModels) {
+      return models.filter((m) => m.isFree)
+    }
+    return models
+  }, [models, provider, showOnlyFreeModels])
+
+  useEffect(() => {
+    if (provider === 'openrouter' && showOnlyFreeModels && selectedModel) {
+      const activeModelObj = models.find((m) => m.id === selectedModel)
+      if (activeModelObj && !activeModelObj.isFree) {
+        const firstFree = models.find((m) => m.isFree)
+        if (firstFree) {
+          setSelectedModel(firstFree.id)
+        }
+      }
+    }
+  }, [showOnlyFreeModels, provider, models, selectedModel])
   const [serverProviders, setServerProviders] = useState<Record<AiProviderId, boolean>>({
     gemini: false,
     openrouter: false,
@@ -1092,16 +1112,31 @@ export default function Home() {
 
                 {models.length > 0 && (
                   <div className="space-y-2">
+                    {provider === 'openrouter' && (
+                      <div className="flex items-center gap-2 py-1 mt-1">
+                        <input
+                          type="checkbox"
+                          id="show-only-free-models"
+                          checked={showOnlyFreeModels}
+                          onChange={(e) => setShowOnlyFreeModels(e.target.checked)}
+                          className="h-4 w-4 rounded border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-primary)] accent-[var(--studio-primary)] focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                        />
+                        <Label htmlFor="show-only-free-models" className="text-xs text-[var(--studio-muted)] cursor-pointer select-none font-semibold uppercase tracking-wide">
+                          {t.settings.showOnlyFreeModels}
+                        </Label>
+                      </div>
+                    )}
+
                     <Label htmlFor="ai-model" className="text-[var(--studio-muted)] text-xs font-semibold uppercase tracking-wide">{t.settings.model}</Label>
                     <Select value={selectedModel} onValueChange={setSelectedModel}>
                       <SelectTrigger id="ai-model" className="w-full border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)]">
                         <SelectValue placeholder={t.settings.modelPlaceholder} />
                       </SelectTrigger>
                       {(() => {
-                        const audioModels = models.filter((m) => m.category === 'audio')
-                        const textModels = models.filter((m) => m.category === 'text' || !m.category)
-                        const imageModels = models.filter((m) => m.category === 'image')
-                        const otherModels = models.filter((m) => m.category === 'other')
+                        const audioModels = filteredModels.filter((m) => m.category === 'audio')
+                        const textModels = filteredModels.filter((m) => m.category === 'text' || !m.category)
+                        const imageModels = filteredModels.filter((m) => m.category === 'image')
+                        const otherModels = filteredModels.filter((m) => m.category === 'other')
                         
                         return (
                           <SelectContent className="max-h-[320px] overflow-y-auto">
@@ -1158,7 +1193,7 @@ export default function Home() {
                       })()}
                     </Select>
                     <p className="text-[10px] text-[var(--studio-subtle)] leading-relaxed">
-                      {t.settings.modelCount(models.length, providerLabel(provider), (
+                      {t.settings.modelCount(filteredModels.length, providerLabel(provider), (
                         apiKeyMode === 'server' && serverProviders[provider]
                           ? t.settings.sourceServer
                           : apiKeyMode === 'session' && apiKey.trim()
@@ -1439,13 +1474,13 @@ export default function Home() {
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
-                    {models.length > 0 && (
+                    {filteredModels.length > 0 && (
                       <select
                         className="text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] px-2 h-10 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer flex-1 font-medium"
                         value={selectedModel}
                         onChange={(e) => setSelectedModel(e.target.value)}
                       >
-                        {models.map((m) => (
+                        {filteredModels.map((m) => (
                           <option key={m.id} value={m.id}>
                             {m.name || m.id}{m.isFree ? ` (${locale === 'en' ? 'FREE' : 'GRÁTIS'})` : ''}
                           </option>
@@ -1453,6 +1488,20 @@ export default function Home() {
                       </select>
                     )}
                   </div>
+                  {provider === 'openrouter' && models.length > 0 && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="checkbox"
+                        id="reprocess-show-only-free"
+                        checked={showOnlyFreeModels}
+                        onChange={(e) => setShowOnlyFreeModels(e.target.checked)}
+                        className="h-4 w-4 rounded border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-primary)] accent-[var(--studio-primary)] focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                      />
+                      <Label htmlFor="reprocess-show-only-free" className="text-xs text-[var(--studio-muted)] cursor-pointer select-none font-medium">
+                        {t.settings.showOnlyFreeModels}
+                      </Label>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -56,18 +56,18 @@ export const AI_PROVIDERS: AiProvider[] = [
     name: 'OpenAI',
     apiKeyLabel: 'OpenAI API Key',
     serverEnvVar: 'OPENAI_API_KEY',
-    supportsAudioProcessing: false,
+    supportsAudioProcessing: true,
     requiresApiKeyForModels: true,
-    maxUploadMb: 10,
+    maxUploadMb: 25,
   },
   {
     id: 'anthropic',
     name: 'Anthropic',
     apiKeyLabel: 'Anthropic API Key',
     serverEnvVar: 'ANTHROPIC_API_KEY',
-    supportsAudioProcessing: false,
+    supportsAudioProcessing: true,
     requiresApiKeyForModels: true,
-    maxUploadMb: 10,
+    maxUploadMb: 25,
   },
 ]
 
