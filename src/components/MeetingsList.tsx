@@ -984,14 +984,21 @@ ${summary.actionItems.map(a => {
     const isToday = date.toDateString() === referenceDate.toDateString()
     const isYesterday = date.toDateString() === new Date(referenceDate.getTime() - 24 * 60 * 60 * 1000).toDateString()
 
-    if (isToday) return t.history.filters.today
-    if (isYesterday) return t.history.yesterday
+    const hours = date.getHours().toString().padStart(2, '0')
+    const minutes = date.getMinutes().toString().padStart(2, '0')
+    const timeStr = `${hours}:${minutes}`
+    const connector = locale === 'en' ? ' at ' : ' às '
 
-    return date.toLocaleDateString(locale === 'en' ? 'en-US' : 'pt-BR', {
+    if (isToday) return `${t.history.filters.today}${connector}${timeStr}`
+    if (isYesterday) return `${t.history.yesterday}${connector}${timeStr}`
+
+    const dateStr = date.toLocaleDateString(locale === 'en' ? 'en-US' : 'pt-BR', {
       day: '2-digit',
       month: 'short',
       year: date.getFullYear() !== referenceDate.getFullYear() ? 'numeric' : undefined,
     })
+
+    return `${dateStr}${connector}${timeStr}`
   }
 
   const dashboardMeetings = useMemo(() => {
