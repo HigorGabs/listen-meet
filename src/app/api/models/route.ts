@@ -121,6 +121,7 @@ async function listOpenRouterModels(apiKey: string): Promise<AiModelOption[]> {
       context_length?: number
       created?: number
       architecture?: { input_modalities?: string[]; output_modalities?: string[] }
+      pricing?: { prompt?: string; completion?: string }
     }) => {
       const input = model.architecture?.input_modalities || []
       const id = model.id.toLowerCase()
@@ -134,6 +135,10 @@ async function listOpenRouterModels(apiKey: string): Promise<AiModelOption[]> {
         category = 'image'
       }
 
+      const promptPrice = Number(model.pricing?.prompt || '0')
+      const completionPrice = Number(model.pricing?.completion || '0')
+      const isFree = promptPrice === 0 && completionPrice === 0
+
       return {
         id: model.id,
         name: model.name || model.id,
@@ -144,6 +149,7 @@ async function listOpenRouterModels(apiKey: string): Promise<AiModelOption[]> {
         inputModalities: model.architecture?.input_modalities,
         outputModalities: model.architecture?.output_modalities,
         category,
+        isFree,
       }
     })
 }

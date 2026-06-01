@@ -1112,7 +1112,7 @@ export default function Home() {
                                 </SelectLabel>
                                 {audioModels.map((model) => (
                                   <SelectItem key={model.id} value={model.id}>
-                                    {model.name || model.id}{model.recommended ? ` (${t.settings.recommended})` : ''}
+                                    {model.name || model.id}{model.isFree ? ` (${locale === 'en' ? 'FREE' : 'GRÁTIS'})` : ''}{model.recommended ? ` (${t.settings.recommended})` : ''}
                                   </SelectItem>
                                 ))}
                               </SelectGroup>
@@ -1124,7 +1124,7 @@ export default function Home() {
                                 </SelectLabel>
                                 {textModels.map((model) => (
                                   <SelectItem key={model.id} value={model.id}>
-                                    {model.name || model.id}{model.recommended ? ` (${t.settings.recommended})` : ''}
+                                    {model.name || model.id}{model.isFree ? ` (${locale === 'en' ? 'FREE' : 'GRÁTIS'})` : ''}{model.recommended ? ` (${t.settings.recommended})` : ''}
                                   </SelectItem>
                                 ))}
                               </SelectGroup>
@@ -1136,7 +1136,7 @@ export default function Home() {
                                 </SelectLabel>
                                 {imageModels.map((model) => (
                                   <SelectItem key={model.id} value={model.id}>
-                                    {model.name || model.id}{model.recommended ? ` (${t.settings.recommended})` : ''}
+                                    {model.name || model.id}{model.isFree ? ` (${locale === 'en' ? 'FREE' : 'GRÁTIS'})` : ''}{model.recommended ? ` (${t.settings.recommended})` : ''}
                                   </SelectItem>
                                 ))}
                               </SelectGroup>
@@ -1148,7 +1148,7 @@ export default function Home() {
                                 </SelectLabel>
                                 {otherModels.map((model) => (
                                   <SelectItem key={model.id} value={model.id}>
-                                    {model.name || model.id}{model.recommended ? ` (${t.settings.recommended})` : ''}
+                                    {model.name || model.id}{model.isFree ? ` (${locale === 'en' ? 'FREE' : 'GRÁTIS'})` : ''}{model.recommended ? ` (${t.settings.recommended})` : ''}
                                   </SelectItem>
                                 ))}
                               </SelectGroup>
@@ -1446,7 +1446,9 @@ export default function Home() {
                         onChange={(e) => setSelectedModel(e.target.value)}
                       >
                         {models.map((m) => (
-                          <option key={m.id} value={m.id}>{m.name || m.id}</option>
+                          <option key={m.id} value={m.id}>
+                            {m.name || m.id}{m.isFree ? ` (${locale === 'en' ? 'FREE' : 'GRÁTIS'})` : ''}
+                          </option>
                         ))}
                       </select>
                     )}

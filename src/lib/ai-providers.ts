@@ -23,6 +23,7 @@ export interface AiModelOption {
   created?: number | string
   recommended?: boolean
   category?: 'audio' | 'text' | 'image' | 'other'
+  isFree?: boolean
 }
 
 export interface AiRuntimeConfig {
