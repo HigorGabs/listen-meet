@@ -183,7 +183,9 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
       monitorStreamRef.current = stream
 
       // Create audio context and analyser
-      const audioContext = new (window.AudioContext || (window as unknown as typeof AudioContext))()
+      const AudioCtxClass = typeof window !== 'undefined' ? (window.AudioContext || (window as any).webkitAudioContext) : null
+      if (!AudioCtxClass) throw new Error('Web Audio API not supported in this browser.')
+      const audioContext = new AudioCtxClass()
       audioContextRef.current = audioContext
 
       const source = audioContext.createMediaStreamSource(stream)
@@ -278,7 +280,9 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
       chunksRef.current = []
 
       // Set up audio monitoring for recording levels
-      const audioContext = new (window.AudioContext || (window as unknown as typeof AudioContext))()
+      const AudioCtxClass = typeof window !== 'undefined' ? (window.AudioContext || (window as any).webkitAudioContext) : null
+      if (!AudioCtxClass) throw new Error('Web Audio API not supported in this browser.')
+      const audioContext = new AudioCtxClass()
       audioContextRef.current = audioContext
 
       const source = audioContext.createMediaStreamSource(stream)
@@ -407,7 +411,7 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
       
       let finalFile = file
       
-      if (file.size > 10 * 1024 * 1024 || file.size > limitBytes) {
+      if (file.size > limitBytes) {
         setIsCompressing(true)
         try {
           finalFile = await compressAudioFile(file)
@@ -484,7 +488,9 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
 
 // Client-side pure JS audio compression and downsampling helpers
 async function compressAudioFile(file: File): Promise<File> {
-  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext || (globalThis as any).AudioContext
+  const AudioContextClass = typeof window !== 'undefined'
+    ? (window.AudioContext || (window as any).webkitAudioContext || (globalThis as any).AudioContext)
+    : (globalThis as any).AudioContext
   if (!AudioContextClass) {
     throw new Error('Web Audio API not supported in this browser.')
   }
@@ -501,7 +507,9 @@ async function compressAudioFile(file: File): Promise<File> {
   const targetSampleRate = audioBuffer.duration > 2700 ? 8000 : 16000
   const numberOfChannels = 1
   
-  const OfflineAudioContextClass = window.OfflineAudioContext || (window as any).webkitOfflineAudioContext || (globalThis as any).OfflineAudioContext
+  const OfflineAudioContextClass = typeof window !== 'undefined'
+    ? (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext || (globalThis as any).OfflineAudioContext)
+    : (globalThis as any).OfflineAudioContext
   if (!OfflineAudioContextClass) {
     throw new Error('OfflineAudioContext not supported in this browser.')
   }

@@ -114,3 +114,16 @@ export function saveProfile(profile: UserProfile): boolean {
     return false
   }
 }
+
+/**
+ * Gets or generates a unique, persistent client ID for rate limiting fallbacks
+ */
+export function getClientId(): string {
+  if (typeof window === 'undefined') return ''
+  let id = localStorage.getItem('listen-meet-client-id')
+  if (!id) {
+    id = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+    localStorage.setItem('listen-meet-client-id', id)
+  }
+  return id
+}

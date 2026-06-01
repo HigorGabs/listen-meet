@@ -14,6 +14,7 @@ import {
 import { MeetingRecord, MeetingStorage } from '@/utils/storage'
 import { cn } from '@/lib/utils'
 import { getMessages, type Locale } from '@/lib/i18n'
+import { getClientId } from '@/lib/profile'
 
 interface MeetingsListProps {
   onNewRecording?: () => void
@@ -199,6 +200,7 @@ export function MeetingsList({
   const [jiraToken, setJiraToken] = useState(() => (typeof window !== 'undefined' && localStorage.getItem('listen-meet-jira-token')) || '')
   const [jiraDomain, setJiraDomain] = useState(() => (typeof window !== 'undefined' && localStorage.getItem('listen-meet-jira-domain')) || '')
   const [jiraKey, setJiraKey] = useState(() => (typeof window !== 'undefined' && localStorage.getItem('listen-meet-jira-key')) || '')
+  const [jiraEmail, setJiraEmail] = useState(() => (typeof window !== 'undefined' && localStorage.getItem('listen-meet-jira-email')) || '')
 
   const [isSyncingNotion, setIsSyncingNotion] = useState(false)
   const [isSyncingSlack, setIsSyncingSlack] = useState(false)
@@ -215,10 +217,47 @@ export function MeetingsList({
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  const filteredMeetings = useMemo(() => meetings.filter((meeting) => {
+    const query = searchTerm.toLowerCase()
+    const matchesSearch = getSearchableMeetingText(meeting).includes(query)
+
+    if (!matchesSearch) return false
+
+    if (selectedCompanyFilter !== 'all') {
+      if (selectedCompanyFilter === 'none') {
+        if (meeting.company) return false
+      } else if (meeting.company !== selectedCompanyFilter) {
+        return false
+      }
+    }
+
+    const meetingDate = new Date(meeting.date)
+
+    if (filter === 'today') {
+      return meetingDate.toDateString() === referenceDate.toDateString()
+    }
+
+    if (filter === 'week') {
+      const weekAgo = new Date(referenceDate.getTime() - 7 * 24 * 60 * 60 * 1000)
+      return meetingDate >= weekAgo
+    }
+
+    if (filter === 'month') {
+      const monthAgo = new Date(referenceDate.getTime() - 30 * 24 * 60 * 60 * 1000)
+      return meetingDate >= monthAgo
+    }
+
+    return true
+  }), [filter, meetings, referenceDate, searchTerm, selectedCompanyFilter])
+
+  const selectedMeeting = selectedMeetingId === processingMeeting?.id
+    ? null
+    : filteredMeetings.find((meeting) => meeting.id === selectedMeetingId) || filteredMeetings[0]
+
   const audioUrl = useMemo(() => {
     const activeMeeting = selectedMeetingId === processingMeeting?.id
       ? null
-      : meetings.find((meeting) => meeting.id === selectedMeetingId) || meetings[0]
+      : filteredMeetings.find((meeting) => meeting.id === selectedMeetingId) || filteredMeetings[0]
 
     if (activeMeeting?.audioBlob) {
       try {
@@ -228,7 +267,7 @@ export function MeetingsList({
       }
     }
     return null
-  }, [selectedMeetingId, meetings, processingMeeting])
+  }, [selectedMeetingId, filteredMeetings, processingMeeting])
 
   // Revoke object URL on change/unmount
   useEffect(() => {
@@ -558,43 +597,6 @@ export function MeetingsList({
     localStorage.setItem('listen-meet-checklists', JSON.stringify(next))
   }
 
-  const filteredMeetings = useMemo(() => meetings.filter((meeting) => {
-    const query = searchTerm.toLowerCase()
-    const matchesSearch = getSearchableMeetingText(meeting).includes(query)
-
-    if (!matchesSearch) return false
-
-    if (selectedCompanyFilter !== 'all') {
-      if (selectedCompanyFilter === 'none') {
-        if (meeting.company) return false
-      } else if (meeting.company !== selectedCompanyFilter) {
-        return false
-      }
-    }
-
-    const meetingDate = new Date(meeting.date)
-
-    if (filter === 'today') {
-      return meetingDate.toDateString() === referenceDate.toDateString()
-    }
-
-    if (filter === 'week') {
-      const weekAgo = new Date(referenceDate.getTime() - 7 * 24 * 60 * 60 * 1000)
-      return meetingDate >= weekAgo
-    }
-
-    if (filter === 'month') {
-      const monthAgo = new Date(referenceDate.getTime() - 30 * 24 * 60 * 60 * 1000)
-      return meetingDate >= monthAgo
-    }
-
-    return true
-  }), [filter, meetings, referenceDate, searchTerm, selectedCompanyFilter])
-
-  const selectedMeeting = selectedMeetingId === processingMeeting?.id
-    ? null
-    : filteredMeetings.find((meeting) => meeting.id === selectedMeetingId) || filteredMeetings[0]
-
   const handleDelete = (id: string) => {
     setConfirmModal({
       isOpen: true,
@@ -691,7 +693,7 @@ ${summary.timeline?.map(t => `- **${t.time} (${t.phase})**: ${t.description}`).j
   <div class="meta">
     <span><strong>Data:</strong> ${new Date(meeting.date).toLocaleDateString(locale)}</span>
     <span><strong>Duração:</strong> ${formatDuration(meeting.duration)}</span>
-    <span><strong>IA:</strong> ${meeting.providerName || 'N/A'} (${meeting.modelName || 'N/A'})</span>
+    <span><strong>IA:</strong> ${escapeHtml(meeting.providerName || 'N/A')} (${escapeHtml(meeting.modelName || 'N/A')})</span>
   </div>
   
   <h2>📝 Resumo Geral</h2>
@@ -779,6 +781,7 @@ ${summary.actionItems.map(a => {
     localStorage.setItem('listen-meet-jira-token', jiraToken)
     localStorage.setItem('listen-meet-jira-domain', jiraDomain)
     localStorage.setItem('listen-meet-jira-key', jiraKey)
+    localStorage.setItem('listen-meet-jira-email', jiraEmail)
     setConfirmModal({
       isOpen: true,
       title: locale === 'en' ? 'Jira Saved' : 'Jira Salvo',
@@ -806,7 +809,8 @@ ${summary.actionItems.map(a => {
       const response = await fetch('/api/sync', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Client-ID': getClientId()
         },
         body: JSON.stringify({
           type: 'notion',
@@ -865,7 +869,8 @@ ${summary.actionItems.map(a => {
       const response = await fetch('/api/sync', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Client-ID': getClientId()
         },
         body: JSON.stringify({
           type: 'slack',
@@ -904,11 +909,11 @@ ${summary.actionItems.map(a => {
   }
 
   const handleSyncJira = async (meeting: MeetingRecord) => {
-    if (!jiraToken || !jiraDomain || !jiraKey) {
+    if (!jiraToken || !jiraDomain || !jiraKey || !jiraEmail) {
       setConfirmModal({
         isOpen: true,
         title: locale === 'en' ? 'Missing Config' : 'Configuração Ausente',
-        message: locale === 'en' ? 'Please configure Jira Domain, Project Key, and API Token.' : 'Por favor, preencha o Domínio, Chave do Projeto e Token de API do Jira.',
+        message: locale === 'en' ? 'Please configure Jira Domain, Project Key, Email, and API Token.' : 'Por favor, preencha o Domínio, Chave do Projeto, Email e Token de API do Jira.',
         onConfirm: () => {}
       })
       return
@@ -921,13 +926,15 @@ ${summary.actionItems.map(a => {
       const response = await fetch('/api/sync', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Client-ID': getClientId()
         },
         body: JSON.stringify({
           type: 'jira',
           payload: {
             domain: jiraDomain,
             projectKey: jiraKey,
+            email: jiraEmail,
             token: jiraToken,
             meeting
           }
@@ -985,18 +992,26 @@ ${summary.actionItems.map(a => {
     })
   }
 
+  const dashboardMeetings = useMemo(() => {
+    return meetings.filter(meeting => {
+      if (selectedCompanyFilter === 'all') return true
+      if (selectedCompanyFilter === 'none') return !meeting.company
+      return meeting.company === selectedCompanyFilter
+    })
+  }, [meetings, selectedCompanyFilter])
+
   // Dashboard Aggregates
-  const totalMinutes = Math.floor(meetings.reduce((acc, meeting) => acc + meeting.duration, 0) / 60)
-  const totalDecisions = meetings.reduce((acc, meeting) => acc + (meeting.summary.metrics?.decisionsCount ?? 0), 0)
-  const totalActions = meetings.reduce((acc, meeting) => acc + meeting.summary.actionItems.length, 0)
-  const efficiencyValues = meetings
+  const totalMinutes = Math.floor(dashboardMeetings.reduce((acc, meeting) => acc + meeting.duration, 0) / 60)
+  const totalDecisions = dashboardMeetings.reduce((acc, meeting) => acc + (meeting.summary.metrics?.decisionsCount ?? 0), 0)
+  const totalActions = dashboardMeetings.reduce((acc, meeting) => acc + meeting.summary.actionItems.length, 0)
+  const efficiencyValues = dashboardMeetings
     .map((meeting) => parsePercentage(meeting.summary.metrics?.efficiency))
     .filter((value): value is number => value !== null)
   const averageEfficiency = efficiencyValues.length > 0
     ? `${Math.round(efficiencyValues.reduce((acc, value) => acc + value, 0) / efficiencyValues.length)}%`
     : null
   
-  const qualityValues = meetings
+  const qualityValues = dashboardMeetings
     .map((meeting) => meeting.summary.meetingQualityScore)
     .filter((value): value is number => typeof value === 'number')
   const averageQuality = qualityValues.length > 0
@@ -1005,7 +1020,7 @@ ${summary.actionItems.map(a => {
 
   const hotTopics = useMemo(() => {
     const counts: Record<string, number> = {}
-    meetings.forEach((m) => {
+    dashboardMeetings.forEach((m) => {
       if (m.summary.topicBreakdown && m.summary.topicBreakdown.length > 0) {
         m.summary.topicBreakdown.forEach((tb) => {
           counts[tb.topic] = (counts[tb.topic] || 0) + 1
@@ -1020,7 +1035,7 @@ ${summary.actionItems.map(a => {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10)
-  }, [meetings])
+  }, [dashboardMeetings])
 
   const uniqueCompanies = useMemo(() => {
     return Array.from(
@@ -2996,7 +3011,7 @@ ${summary.actionItems.map(a => {
                               </span>
                               <span className="text-sm font-semibold text-[var(--studio-text)]">Jira</span>
                             </div>
-                            {jiraToken && jiraDomain && jiraKey && (
+                            {jiraToken && jiraDomain && jiraKey && jiraEmail && (
                               <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-400 border border-emerald-500/20">
                                 {locale === 'en' ? 'Active' : 'Ativo'}
                               </span>
@@ -3013,21 +3028,30 @@ ${summary.actionItems.map(a => {
                               onChange={(e) => setJiraDomain(e.target.value)}
                               className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] px-2 py-1.5 text-[var(--studio-text)] placeholder:text-[var(--studio-subtle)] focus:outline-none focus:border-[var(--studio-primary)]"
                             />
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-2">
                               <input
                                 type="text"
-                                placeholder="Project Key"
-                                value={jiraKey}
-                                onChange={(e) => setJiraKey(e.target.value)}
+                                placeholder="Jira Email"
+                                value={jiraEmail}
+                                onChange={(e) => setJiraEmail(e.target.value)}
                                 className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] px-2 py-1.5 text-[var(--studio-text)] placeholder:text-[var(--studio-subtle)] focus:outline-none focus:border-[var(--studio-primary)]"
                               />
-                              <input
-                                type="password"
-                                placeholder="API Token / Pwd"
-                                value={jiraToken}
-                                onChange={(e) => setJiraToken(e.target.value)}
-                                className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] px-2 py-1.5 text-[var(--studio-text)] placeholder:text-[var(--studio-subtle)] focus:outline-none focus:border-[var(--studio-primary)]"
-                              />
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="Project Key"
+                                  value={jiraKey}
+                                  onChange={(e) => setJiraKey(e.target.value)}
+                                  className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] px-2 py-1.5 text-[var(--studio-text)] placeholder:text-[var(--studio-subtle)] focus:outline-none focus:border-[var(--studio-primary)]"
+                                />
+                                <input
+                                  type="password"
+                                  placeholder="API Token / Pwd"
+                                  value={jiraToken}
+                                  onChange={(e) => setJiraToken(e.target.value)}
+                                  className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] px-2 py-1.5 text-[var(--studio-text)] placeholder:text-[var(--studio-subtle)] focus:outline-none focus:border-[var(--studio-primary)]"
+                                />
+                              </div>
                             </div>
                           </div>
                         </div>

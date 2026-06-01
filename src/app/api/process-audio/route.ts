@@ -496,7 +496,10 @@ export async function POST(request: NextRequest) {
     let predefinedParticipants: string[] = []
     if (predefinedParticipantsString) {
       try {
-        predefinedParticipants = JSON.parse(predefinedParticipantsString)
+        const parsed = JSON.parse(predefinedParticipantsString)
+        if (Array.isArray(parsed)) {
+          predefinedParticipants = parsed
+        }
       } catch (err) {
         console.error('Failed to parse predefined participants:', err)
       }
@@ -518,7 +521,10 @@ export async function POST(request: NextRequest) {
     let collaborators: Array<{ name: string; role?: string }> = []
     if (collaboratorsString) {
       try {
-        collaborators = JSON.parse(collaboratorsString)
+        const parsed = JSON.parse(collaboratorsString)
+        if (Array.isArray(parsed)) {
+          collaborators = parsed
+        }
       } catch (err) {
         console.error('Failed to parse collaborators:', err)
       }

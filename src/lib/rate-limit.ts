@@ -62,9 +62,13 @@ export function getClientIp(request: Request): string {
   const platformIp = getPlatformClientIp(request)
   if (platformIp) return platformIp
 
-  // Trust proxy headers by default unless explicitly disabled, to avoid blocking all users globally as 'unknown'.
-  const trustProxyHeaders = process.env.LISTEN_MEET_TRUST_PROXY_HEADERS !== 'false'
-  if (!trustProxyHeaders) return 'unknown'
+  const trustProxyHeaders = process.env.LISTEN_MEET_TRUST_PROXY_HEADERS === 'true'
+  if (!trustProxyHeaders) {
+    // If not behind a trusted proxy, use client ID header if available to prevent global lockout under 'unknown'.
+    const clientId = request.headers.get('x-client-id')
+    if (clientId) return `client-${clientId}`
+    return 'unknown'
+  }
 
   const forwardedFor = request.headers.get('x-forwarded-for')
   const realIp = request.headers.get('x-real-ip')

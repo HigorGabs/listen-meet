@@ -51,7 +51,7 @@ async function listGeminiModels(apiKey: string): Promise<AiModelOption[]> {
 
   const data = await response.json()
 
-  return (data.models || [])
+  return (data?.models || [])
     .filter((model: { supportedGenerationMethods?: string[] }) =>
       model.supportedGenerationMethods?.includes('generateContent')
     )
@@ -109,7 +109,7 @@ async function listOpenRouterModels(apiKey: string): Promise<AiModelOption[]> {
 
   const data = await response.json()
 
-  return (data.data || [])
+  return (data?.data || [])
     .filter((model: { architecture?: { input_modalities?: string[]; output_modalities?: string[] } }) => {
       const output = model.architecture?.output_modalities || []
       return output.includes('text')
@@ -164,7 +164,7 @@ async function listOpenAiModels(apiKey: string): Promise<AiModelOption[]> {
 
   const data = await response.json()
 
-  return (data.data || [])
+  return (data?.data || [])
     .map((model: { id: string; created?: number; owned_by?: string }) => {
       const id = model.id.toLowerCase()
       let category: 'audio' | 'text' | 'image' | 'other' = 'text'

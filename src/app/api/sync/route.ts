@@ -18,6 +18,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Slack Webhook URL e Dados da Reunião são obrigatórios' }, { status: 400 })
       }
 
+      if (!webhookUrl.startsWith('https://hooks.slack.com/services/')) {
+        return NextResponse.json({ error: 'URL do Webhook do Slack inválida (deve começar com https://hooks.slack.com/services/)' }, { status: 400 })
+      }
+
       const summaryText = meeting.summary.summary || meeting.summary.overview || ''
       const actionItemsText = (meeting.summary.actionItems || [])
         .map((a: string) => `• ${a}`)
@@ -133,6 +137,31 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // Fetch notion database properties dynamically to discover title column key
+      let titleKey = 'Name' // Fallback
+      try {
+        const dbResponse = await fetch(`https://api.notion.com/v1/databases/${databaseId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Notion-Version': '2022-06-28'
+          }
+        })
+        if (dbResponse.ok) {
+          const dbData = await dbResponse.json().catch(() => null)
+          if (dbData && dbData.properties) {
+            const foundTitleProperty = Object.keys(dbData.properties).find(
+              (key) => dbData.properties[key]?.type === 'title'
+            )
+            if (foundTitleProperty) {
+              titleKey = foundTitleProperty
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to discover Notion database title property:', e)
+      }
+
       const notionResponse = await fetch('https://api.notion.com/v1/pages', {
         method: 'POST',
         headers: {
@@ -143,7 +172,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           parent: { database_id: databaseId },
           properties: {
-            Name: {
+            [titleKey]: {
               title: [
                 { text: { content: `${title} (${dateStr} - ${durationStr})` } }
               ]
@@ -162,9 +191,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (type === 'jira') {
-      const { domain, projectKey, token, meeting } = payload
-      if (!domain || !projectKey || !token || !meeting) {
-        return NextResponse.json({ error: 'Domain, Project Key, Token e Dados da Reunião são obrigatórios' }, { status: 400 })
+      const { domain, projectKey, email, token, meeting } = payload
+      if (!domain || !projectKey || !email || !token || !meeting) {
+        return NextResponse.json({ error: 'Domain, Project Key, Email, Token e Dados da Reunião são obrigatórios' }, { status: 400 })
       }
 
       const actionItems = meeting.summary.actionItems || []
@@ -175,13 +204,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, count: 0, message: 'Nenhuma ação para criar no Jira' })
       }
 
-      // Basic Auth expects base64 encoded username/email + API token
-      // If the user input email:api_token, we base64 encode it. If it is already a base64 string, we might use it or encode it.
-      // We assume the user typed "email:api_token" or similar, or just their API token. If it doesn't contain a colon, 
-      // we assume it is the token but since Jira Cloud requires email, we tell the user or handle it.
-      const authHeader = token.includes(':') 
-        ? `Basic ${Buffer.from(token).toString('base64')}` 
-        : `Basic ${Buffer.from(`user@example.com:${token}`).toString('base64')}` // Fallback wrapper
+      // Basic Auth expects base64 encoded email + API token (email:api_token)
+      const authHeader = `Basic ${Buffer.from(`${email}:${token}`).toString('base64')}`
 
       const results = []
 

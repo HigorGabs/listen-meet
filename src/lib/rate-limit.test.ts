@@ -18,18 +18,7 @@ describe('rate limit', () => {
     expect(limiter.check('client', 1001).allowed).toBe(true)
   })
 
-  it('trusts forwarded IP headers by default unless proxy trust is explicitly disabled', () => {
-    const request = new Request('https://example.com', {
-      headers: {
-        'x-forwarded-for': '203.0.113.1, 198.51.100.2',
-      },
-    })
-
-    expect(getClientIp(request)).toBe('203.0.113.1')
-  })
-
-  it('does not trust forwarded IP headers if proxy trust is explicitly disabled', () => {
-    process.env.LISTEN_MEET_TRUST_PROXY_HEADERS = 'false'
+  it('does not trust forwarded IP headers unless proxy trust is explicitly enabled', () => {
     const request = new Request('https://example.com', {
       headers: {
         'x-forwarded-for': '203.0.113.1, 198.51.100.2',
@@ -37,6 +26,17 @@ describe('rate limit', () => {
     })
 
     expect(getClientIp(request)).toBe('unknown')
+  })
+
+  it('uses client-id header if available when proxy trust is disabled', () => {
+    const request = new Request('https://example.com', {
+      headers: {
+        'x-forwarded-for': '203.0.113.1, 198.51.100.2',
+        'x-client-id': 'xyz-test-client',
+      },
+    })
+
+    expect(getClientIp(request)).toBe('client-xyz-test-client')
   })
 
   it('uses a platform-provided request IP before considering proxy headers', () => {

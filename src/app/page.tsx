@@ -6,7 +6,7 @@ import { MeetingsList } from '@/components/MeetingsList'
 import { SessionReadinessPanel } from '@/components/SessionReadinessPanel'
 import { StudioCommandRail } from '@/components/StudioCommandRail'
 import { UserProfileModal } from '@/components/UserProfileModal'
-import { getProfile, type UserProfile } from '@/lib/profile'
+import { getProfile, getClientId, type UserProfile } from '@/lib/profile'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
@@ -302,7 +302,10 @@ export default function Home() {
     try {
       const response = await fetch('/api/models', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Client-ID': getClientId(),
+        },
         body: JSON.stringify({
           provider: nextProvider,
           apiKey: nextApiKey || undefined,
@@ -368,7 +371,11 @@ export default function Home() {
       const sessionConfig = readSessionConfig()
 
       try {
-        const response = await fetch('/api/models')
+        const response = await fetch('/api/models', {
+          headers: {
+            'X-Client-ID': getClientId(),
+          }
+        })
         const result = await response.json()
 
         if (!isMounted) return
@@ -570,6 +577,9 @@ export default function Home() {
 
       const response = await fetch('/api/process-audio', {
         method: 'POST',
+        headers: {
+          'X-Client-ID': getClientId(),
+        },
         body: formData
       })
 
