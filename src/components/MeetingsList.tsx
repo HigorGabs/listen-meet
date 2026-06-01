@@ -167,6 +167,16 @@ export function MeetingsList({
   const [dashboardFilterMyTasks, setDashboardFilterMyTasks] = useState(false)
   const [filterMyTasks, setFilterMyTasks] = useState(false)
 
+  // Dashboard Filters & Range Selector
+  const [dashboardTimeRange, setDashboardTimeRange] = useState<'7days' | '30days' | 'all'>('7days')
+  const [selectedDayFilter, setSelectedDayFilter] = useState<string | null>(null)
+
+  const changeTimeRange = (range: '7days' | '30days' | 'all') => {
+    setDashboardTimeRange(range)
+    setSelectedDayFilter(null)
+  }
+
+
   // Report Section Visibility States
   const [hiddenSections, setHiddenSections] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
@@ -1012,17 +1022,153 @@ ${summary.actionItems.map(a => {
   }
 
   const dashboardMeetings = useMemo(() => {
+    const now = new Date(referenceDate)
     return meetings.filter(meeting => {
-      if (selectedCompanyFilter === 'all') return true
-      if (selectedCompanyFilter === 'none') return !meeting.company
-      return meeting.company === selectedCompanyFilter
+      // 1. Company filter
+      const matchesCompany = selectedCompanyFilter === 'all' 
+        ? true 
+        : selectedCompanyFilter === 'none'
+          ? !meeting.company
+          : meeting.company === selectedCompanyFilter
+      if (!matchesCompany) return false
+
+      // 2. Time range filter
+      const mDate = new Date(meeting.date)
+      if (dashboardTimeRange === '7days') {
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        sevenDaysAgo.setHours(0, 0, 0, 0)
+        return mDate >= sevenDaysAgo
+      } else if (dashboardTimeRange === '30days') {
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        thirtyDaysAgo.setHours(0, 0, 0, 0)
+        return mDate >= thirtyDaysAgo
+      }
+      return true // 'all'
     })
-  }, [meetings, selectedCompanyFilter])
+  }, [meetings, selectedCompanyFilter, dashboardTimeRange, referenceDate])
+
+  const comparisonMeetings = useMemo(() => {
+    if (dashboardTimeRange === 'all') return []
+    const now = new Date(referenceDate)
+
+    return meetings.filter(meeting => {
+      // 1. Company filter
+      const matchesCompany = selectedCompanyFilter === 'all' 
+        ? true 
+        : selectedCompanyFilter === 'none'
+          ? !meeting.company
+          : meeting.company === selectedCompanyFilter
+      if (!matchesCompany) return false
+
+      // 2. Time range filter (previous period)
+      const mDate = new Date(meeting.date)
+      if (dashboardTimeRange === '7days') {
+        const start = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+        start.setHours(0, 0, 0, 0)
+        const end = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        end.setHours(0, 0, 0, 0)
+        return mDate >= start && mDate < end
+      } else { // 30days
+        const start = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
+        start.setHours(0, 0, 0, 0)
+        const end = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        end.setHours(0, 0, 0, 0)
+        return mDate >= start && mDate < end
+      }
+    })
+  }, [meetings, selectedCompanyFilter, dashboardTimeRange, referenceDate])
+
+  // Total productive/unproductive time across all filtered meetings
+  const timeTotals = useMemo(() => {
+    let totalProd = 0
+    let totalUnprod = 0
+    
+    dashboardMeetings.forEach(meeting => {
+      let efficiency = 80 // default
+      if (meeting.summary.metrics?.efficiency) {
+        const parsed = parseInt(meeting.summary.metrics.efficiency)
+        if (!isNaN(parsed)) {
+          efficiency = parsed
+        }
+      }
+      
+      const prod = meeting.duration * (efficiency / 100)
+      const unprod = meeting.duration * (1 - efficiency / 100)
+      
+      totalProd += prod
+      totalUnprod += unprod
+    })
+    
+    return {
+      productive: totalProd,
+      unproductive: totalUnprod,
+      total: totalProd + totalUnprod
+    }
+  }, [dashboardMeetings])
+
+  const comparisonTotalTime = useMemo(() => {
+    return comparisonMeetings.reduce((acc, m) => acc + m.duration, 0)
+  }, [comparisonMeetings])
+
+  const trendMetrics = useMemo(() => {
+    if (dashboardTimeRange === 'all') return null
+    
+    const currentDuration = timeTotals.total
+    const prevDuration = comparisonTotalTime
+    
+    const durationDelta = prevDuration > 0
+      ? Math.round(((currentDuration - prevDuration) / prevDuration) * 100)
+      : currentDuration > 0 ? 100 : 0
+      
+    const currentCount = dashboardMeetings.length
+    const prevCount = comparisonMeetings.length
+    
+    const countDelta = prevCount > 0
+      ? Math.round(((currentCount - prevCount) / prevCount) * 100)
+      : currentCount > 0 ? 100 : 0
+
+    return {
+      durationDelta,
+      countDelta,
+      hasPrevData: prevCount > 0 || prevDuration > 0
+    }
+  }, [dashboardMeetings.length, comparisonMeetings.length, timeTotals.total, comparisonTotalTime, dashboardTimeRange])
+
+  // Helper function to check if meeting is in selected day/week/month column
+  const isMeetingInDayFilter = useCallback((meeting: MeetingRecord, filterKey: string) => {
+    const mDate = new Date(meeting.date)
+    const now = new Date(referenceDate)
+    
+    if (dashboardTimeRange === '7days') {
+      return mDate.toDateString() === filterKey
+    } else if (dashboardTimeRange === '30days') {
+      const diffTime = now.getTime() - mDate.getTime()
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+      
+      let weekIndex = -1
+      if (diffDays >= 0 && diffDays < 7) {
+        weekIndex = 3
+      } else if (diffDays >= 7 && diffDays < 14) {
+        weekIndex = 2
+      } else if (diffDays >= 14 && diffDays < 21) {
+        weekIndex = 1
+      } else if (diffDays >= 21 && diffDays < 30) {
+        weekIndex = 0
+      }
+      
+      return `week-${weekIndex + 1}` === filterKey
+    } else {
+      const mYear = mDate.getFullYear()
+      const mMonth = mDate.getMonth()
+      return `month-${mYear}-${mMonth}` === filterKey
+    }
+  }, [dashboardTimeRange, referenceDate])
 
   // Dashboard Aggregates
   const totalMinutes = Math.floor(dashboardMeetings.reduce((acc, meeting) => acc + meeting.duration, 0) / 60)
   const totalDecisions = dashboardMeetings.reduce((acc, meeting) => acc + (meeting.summary.metrics?.decisionsCount ?? 0), 0)
   const totalActions = dashboardMeetings.reduce((acc, meeting) => acc + meeting.summary.actionItems.length, 0)
+  
   const efficiencyValues = dashboardMeetings
     .map((meeting) => parsePercentage(meeting.summary.metrics?.efficiency))
     .filter((value): value is number => value !== null)
@@ -1074,11 +1220,7 @@ ${summary.actionItems.map(a => {
 
   // Master action list (for dashboard)
   const masterActions = useMemo(() => {
-    const filteredForDashboard = selectedCompanyFilter === 'all' 
-      ? meetings 
-      : meetings.filter(m => selectedCompanyFilter === 'none' ? !m.company : m.company === selectedCompanyFilter)
-
-    return filteredForDashboard.flatMap((meeting) => 
+    return dashboardMeetings.flatMap((meeting) => 
       meeting.summary.actionItems.map((action, idx) => ({
         meetingId: meeting.id,
         meetingTitle: meeting.summary.title,
@@ -1087,7 +1229,7 @@ ${summary.actionItems.map(a => {
         key: `${meeting.id}-action-${idx}`
       }))
     )
-  }, [meetings, selectedCompanyFilter])
+  }, [dashboardMeetings])
 
   const masterActionsDone = masterActions.filter(a => checklistState[a.key]).length
 
@@ -1126,23 +1268,79 @@ ${summary.actionItems.map(a => {
 
   // Filtered master actions to be displayed on the dashboard
   const displayedMasterActions = useMemo(() => {
-    if (!dashboardFilterMyTasks || !meName) return masterActions
-    return myActions
-  }, [masterActions, myActions, dashboardFilterMyTasks, meName])
+    let actions = dashboardFilterMyTasks && meName ? myActions : masterActions
+    if (selectedDayFilter) {
+      actions = actions.filter(action => {
+        const meeting = dashboardMeetings.find(m => m.id === action.meetingId)
+        if (!meeting) return false
+        return isMeetingInDayFilter(meeting, selectedDayFilter)
+      })
+    }
+    return actions
+  }, [masterActions, myActions, dashboardFilterMyTasks, meName, selectedDayFilter, dashboardMeetings, isMeetingInDayFilter])
 
-  // Categorized meeting types count
-  const meetingTypeStats = useMemo(() => {
-    const stats: Record<string, number> = {}
-    const filteredForDashboard = selectedCompanyFilter === 'all' 
-      ? meetings 
-      : meetings.filter(m => selectedCompanyFilter === 'none' ? !m.company : m.company === selectedCompanyFilter)
-
-    filteredForDashboard.forEach((m) => {
+  // Categorized meeting types duration/count breakdown
+  const categoryTimeBreakdown = useMemo(() => {
+    const stats: Record<string, { duration: number; count: number }> = {}
+    
+    dashboardMeetings.forEach((m) => {
       const type = m.summary.tags?.meetingType || (locale === 'en' ? 'General' : 'Geral')
-      stats[type] = (stats[type] || 0) + 1
+      if (!stats[type]) {
+        stats[type] = { duration: 0, count: 0 }
+      }
+      stats[type].duration += m.duration
+      stats[type].count += 1
     })
-    return Object.entries(stats).map(([name, value]) => ({ name, value }))
-  }, [meetings, selectedCompanyFilter, locale])
+    
+    const totalDuration = Object.values(stats).reduce((acc, curr) => acc + curr.duration, 0)
+    
+    return Object.entries(stats)
+      .map(([name, data]) => ({
+        name,
+        duration: data.duration,
+        count: data.count,
+        percentage: totalDuration > 0 ? Math.round((data.duration / totalDuration) * 100) : 0
+      }))
+      .sort((a, b) => b.duration - a.duration)
+  }, [dashboardMeetings, locale])
+
+  // Focus & risks details
+  const focusMetrics = useMemo(() => {
+    let totalFocus = 0
+    let focusCount = 0
+    const allRisks: Array<{ risk: string; impact: string; meetingTitle: string }> = []
+    
+    dashboardMeetings.forEach(m => {
+      if (m.summary.meetingEfficiencyAnalysis?.focusScore !== undefined) {
+        totalFocus += m.summary.meetingEfficiencyAnalysis.focusScore
+        focusCount++
+      } else {
+        let efficiency = 80
+        if (m.summary.metrics?.efficiency) {
+          const parsed = parseInt(m.summary.metrics.efficiency)
+          if (!isNaN(parsed)) efficiency = parsed
+        }
+        totalFocus += efficiency
+        focusCount++
+      }
+      
+      if (m.summary.risksAndBlockers && m.summary.risksAndBlockers.length > 0) {
+        m.summary.risksAndBlockers.forEach(rb => {
+          allRisks.push({
+            risk: rb.risk,
+            impact: rb.impact || 'N/A',
+            meetingTitle: m.summary.title
+          })
+        })
+      }
+    })
+    
+    const avgFocus = focusCount > 0 ? Math.round(totalFocus / focusCount) : 75
+    return {
+      avgFocus,
+      risks: allRisks.slice(0, 5)
+    }
+  }, [dashboardMeetings])
 
   const weeklyTimeStats = useMemo(() => {
     const stats: Array<{
@@ -1151,52 +1349,135 @@ ${summary.actionItems.map(a => {
       productive: number
       unproductive: number
       total: number
+      key: string
     }> = []
-    const now = new Date()
     
-    // We go from 6 days ago (index 0) to today (index 6)
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
-      const dayOfWeek = d.getDay() // 0 = Sunday, 1 = Monday, etc.
-      
-      let label = ''
-      if (locale === 'en') {
-        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-        label = days[dayOfWeek]
-      } else {
-        const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-        label = days[dayOfWeek]
+    const now = new Date(referenceDate)
+    
+    if (dashboardTimeRange === '7days') {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
+        const dayOfWeek = d.getDay()
+        let label = ''
+        if (locale === 'en') {
+          const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+          label = days[dayOfWeek]
+        } else {
+          const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+          label = days[dayOfWeek]
+        }
+        stats.push({
+          label,
+          dateStr: d.toLocaleDateString(locale === 'en' ? 'en-US' : 'pt-BR', { day: 'numeric', month: 'short' }),
+          productive: 0,
+          unproductive: 0,
+          total: 0,
+          key: d.toDateString(),
+        })
       }
       
-      stats.push({
-        label,
-        dateStr: d.toDateString(),
-        productive: 0,   // in seconds
-        unproductive: 0, // in seconds
-        total: 0,        // in seconds
-      })
-    }
-    
-    // Filter meetings from the last 7 days
-    const sixDaysAgo = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000)
-    sixDaysAgo.setHours(0, 0, 0, 0)
-    
-    dashboardMeetings.forEach(meeting => {
-      const mDate = new Date(meeting.date)
-      if (mDate >= sixDaysAgo) {
+      dashboardMeetings.forEach(meeting => {
+        const mDate = new Date(meeting.date)
         const dateStr = mDate.toDateString()
-        const statItem = stats.find(item => item.dateStr === dateStr)
-        
+        const statItem = stats.find(item => item.key === dateStr)
         if (statItem) {
-          // Parse efficiency
-          let efficiency = 80 // default
+          let efficiency = 80
           if (meeting.summary.metrics?.efficiency) {
             const parsed = parseInt(meeting.summary.metrics.efficiency)
-            if (!isNaN(parsed)) {
-              efficiency = parsed
-            }
+            if (!isNaN(parsed)) efficiency = parsed
           }
+          const prod = meeting.duration * (efficiency / 100)
+          const unprod = meeting.duration * (1 - efficiency / 100)
+          statItem.productive += prod
+          statItem.unproductive += unprod
+          statItem.total += meeting.duration
+        }
+      })
+    } else if (dashboardTimeRange === '30days') {
+      for (let i = 3; i >= 0; i--) {
+        const startDay = i * 7 + 6
+        const endDay = i * 7
+        const dStart = new Date(now.getTime() - startDay * 24 * 60 * 60 * 1000)
+        const dEnd = new Date(now.getTime() - endDay * 24 * 60 * 60 * 1000)
+        
+        const label = locale === 'en' ? `Wk ${4 - i}` : `Sem ${4 - i}`
+        const rangeStr = `${dStart.getDate()}/${dStart.getMonth() + 1} - ${dEnd.getDate()}/${dEnd.getMonth() + 1}`
+        
+        stats.push({
+          label,
+          dateStr: rangeStr,
+          productive: 0,
+          unproductive: 0,
+          total: 0,
+          key: `week-${4 - i}`,
+        })
+      }
+      
+      dashboardMeetings.forEach(meeting => {
+        const mDate = new Date(meeting.date)
+        const diffTime = now.getTime() - mDate.getTime()
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+        
+        let weekIndex = -1
+        if (diffDays >= 0 && diffDays < 7) {
+          weekIndex = 3
+        } else if (diffDays >= 7 && diffDays < 14) {
+          weekIndex = 2
+        } else if (diffDays >= 14 && diffDays < 21) {
+          weekIndex = 1
+        } else if (diffDays >= 21 && diffDays < 30) {
+          weekIndex = 0
+        }
+        
+        if (weekIndex >= 0 && weekIndex < 4) {
+          let efficiency = 80
+          if (meeting.summary.metrics?.efficiency) {
+            const parsed = parseInt(meeting.summary.metrics.efficiency)
+            if (!isNaN(parsed)) efficiency = parsed
+          }
+          const prod = meeting.duration * (efficiency / 100)
+          const unprod = meeting.duration * (1 - efficiency / 100)
           
+          stats[weekIndex].productive += prod
+          stats[weekIndex].unproductive += unprod
+          stats[weekIndex].total += meeting.duration
+        }
+      })
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const monthIndex = d.getMonth()
+        let label = ''
+        if (locale === 'en') {
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+          label = months[monthIndex]
+        } else {
+          const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+          label = months[monthIndex]
+        }
+        stats.push({
+          label,
+          dateStr: `${d.getFullYear()}`,
+          productive: 0,
+          unproductive: 0,
+          total: 0,
+          key: `month-${d.getFullYear()}-${monthIndex}`,
+        })
+      }
+      
+      dashboardMeetings.forEach(meeting => {
+        const mDate = new Date(meeting.date)
+        const mYear = mDate.getFullYear()
+        const mMonth = mDate.getMonth()
+        
+        const key = `month-${mYear}-${mMonth}`
+        const statItem = stats.find(item => item.key === key)
+        if (statItem) {
+          let efficiency = 80
+          if (meeting.summary.metrics?.efficiency) {
+            const parsed = parseInt(meeting.summary.metrics.efficiency)
+            if (!isNaN(parsed)) efficiency = parsed
+          }
           const prod = meeting.duration * (efficiency / 100)
           const unprod = meeting.duration * (1 - efficiency / 100)
           
@@ -1204,39 +1485,11 @@ ${summary.actionItems.map(a => {
           statItem.unproductive += unprod
           statItem.total += meeting.duration
         }
-      }
-    })
+      })
+    }
     
     return stats
-  }, [dashboardMeetings, locale])
-
-  // Total productive/unproductive time across all filtered meetings
-  const timeTotals = useMemo(() => {
-    let totalProd = 0
-    let totalUnprod = 0
-    
-    dashboardMeetings.forEach(meeting => {
-      let efficiency = 80 // default
-      if (meeting.summary.metrics?.efficiency) {
-        const parsed = parseInt(meeting.summary.metrics.efficiency)
-        if (!isNaN(parsed)) {
-          efficiency = parsed
-        }
-      }
-      
-      const prod = meeting.duration * (efficiency / 100)
-      const unprod = meeting.duration * (1 - efficiency / 100)
-      
-      totalProd += prod
-      totalUnprod += unprod
-    })
-    
-    return {
-      productive: totalProd,
-      unproductive: totalUnprod,
-      total: totalProd + totalUnprod
-    }
-  }, [dashboardMeetings])
+  }, [dashboardMeetings, dashboardTimeRange, locale, referenceDate])
 
   // Custom categorizations (Daily and 1:1 detectors)
   const meetingType = selectedMeeting?.summary.tags?.meetingType || ''
@@ -1424,51 +1677,109 @@ ${summary.actionItems.map(a => {
       {/* RENDER VIEW MODE: DASHBOARD */}
       {viewMode === 'dashboard' ? (
         <div className="space-y-6">
-          {/* Analytics Details Grid */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Master Action Items list */}
-            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-grid-glow">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--studio-border)] pb-3">
+          {/* Time Range Selector & Dashboard Summary */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[color:var(--studio-border)] pb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--studio-text)]">
+                {locale === 'en' ? 'Performance & Productivity Analytics' : 'Análise de Desempenho e Produtividade'}
+              </h2>
+              <p className="text-xs text-[var(--studio-muted)]">
+                {locale === 'en' 
+                  ? 'Consolidated metrics of time, engagement, and task tracking' 
+                  : 'Métricas consolidadas de tempo, engajamento e acompanhamento de tarefas'}
+              </p>
+            </div>
+            
+            {/* Time Range Switcher */}
+            <div className="flex items-center gap-1 rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] p-1 self-start sm:self-auto shadow-inner">
+              {(['7days', '30days', 'all'] as const).map((range) => {
+                const isActive = dashboardTimeRange === range
+                const label = range === '7days' 
+                  ? (locale === 'en' ? '7 Days' : '7 Dias') 
+                  : range === '30days' 
+                    ? (locale === 'en' ? '30 Days' : '30 Dias') 
+                    : (locale === 'en' ? 'All Time' : 'Tudo')
+                
+                return (
+                  <button
+                    key={range}
+                    type="button"
+                    onClick={() => changeTimeRange(range)}
+                    className={cn(
+                      "rounded-md py-1 px-3 text-[11px] font-bold cursor-pointer transition-all duration-300",
+                      isActive
+                        ? "bg-[var(--studio-primary)] text-zinc-950 shadow-sm"
+                        : "text-[var(--studio-muted)] hover:text-[var(--studio-text)] hover:bg-[var(--studio-panel)]"
+                    )}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Dashboard Cards Grid (3 Columns on Large Screens) */}
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {/* Card 1: Task Tracker */}
+            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-grid-glow flex flex-col h-[350px]">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--studio-border)] pb-3 shrink-0">
                 <div className="flex items-center gap-2">
                   <MaterialIcon name="checklist" className="text-base text-[var(--studio-secondary)]" />
                   <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--studio-text)]">
                     {locale === 'en' ? 'Task Tracker' : 'Evolução de Tarefas'}
                   </h3>
                 </div>
+                
+                {/* Active Filter Indication */}
+                {selectedDayFilter && (
+                  <button
+                    onClick={() => setSelectedDayFilter(null)}
+                    className="flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-[9px] text-emerald-400 font-bold transition-all hover:bg-emerald-500/20 cursor-pointer"
+                  >
+                    <span>
+                      {dashboardTimeRange === '7days' ? (locale === 'en' ? 'Filtered Day' : 'Dia Filtrado') : 
+                       dashboardTimeRange === '30days' ? (locale === 'en' ? 'Filtered Week' : 'Semana Filtrada') : 
+                       (locale === 'en' ? 'Filtered Month' : 'Mês Filtrado')}
+                    </span>
+                    <MaterialIcon name="close" className="text-[10px]" />
+                  </button>
+                )}
+
                 <div className="flex items-center gap-2">
                   {meName && (
                     <button
                       onClick={() => setDashboardFilterMyTasks(prev => !prev)}
                       className={cn(
-                        "text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded border flex items-center gap-1 cursor-pointer transition-all",
+                        "text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded border flex items-center gap-0.5 cursor-pointer transition-all",
                         dashboardFilterMyTasks
                           ? "bg-[var(--studio-primary)] border-[var(--studio-primary)] text-zinc-950"
                           : "border-[var(--studio-border)] text-[var(--studio-muted)] hover:text-[var(--studio-text)]"
                       )}
                     >
-                      <MaterialIcon name="person" className="text-[10px]" filled={dashboardFilterMyTasks} />
+                      <MaterialIcon name="person" className="text-[9px]" filled={dashboardFilterMyTasks} />
                       {locale === 'en' ? 'My Tasks' : 'Minhas Tarefas'}
                     </button>
                   )}
                   <span className="rounded-full bg-[var(--studio-secondary-soft)] px-2 py-0.5 text-xs text-[var(--studio-secondary)] font-medium">
-                    {displayedMasterActions.length} total
+                    {displayedMasterActions.length}
                   </span>
                 </div>
               </div>
 
               {displayedMasterActions.length === 0 ? (
-                <div className="py-8 text-center text-sm text-[var(--studio-muted)]">
+                <div className="flex-1 flex items-center justify-center text-sm text-[var(--studio-muted)]">
                   {locale === 'en' ? 'No actions identified yet.' : 'Nenhuma tarefa identificada ainda.'}
                 </div>
               ) : (
-                <div className="max-h-96 overflow-y-auto space-y-3 pr-2">
+                <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
                   {displayedMasterActions.map((action) => {
                     const isDone = checklistState[action.key] || false
                     return (
                       <div 
                         key={action.key} 
                         className={cn(
-                          "flex items-start gap-3 rounded-lg p-3 border border-[color:var(--studio-border)]/50 bg-[var(--studio-panel)]/40 transition-colors",
+                          "flex items-start gap-2.5 rounded-lg p-2.5 border border-[color:var(--studio-border)]/50 bg-[var(--studio-panel)]/40 transition-colors",
                           isDone && "bg-emerald-500/5 border-emerald-500/10"
                         )}
                       >
@@ -1476,20 +1787,20 @@ ${summary.actionItems.map(a => {
                           type="button"
                           onClick={() => toggleChecklistItem(action.meetingId, `action-${action.key.split('-action-')[1]}`)}
                           className={cn(
-                            "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors cursor-pointer",
+                            "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors cursor-pointer",
                             isDone 
                               ? "bg-[var(--studio-primary)] border-[var(--studio-primary)] text-zinc-950" 
                               : "border-[var(--studio-subtle)] hover:border-[var(--studio-secondary)]"
                           )}
                         >
-                          {isDone && <MaterialIcon name="check" className="text-[11px] font-bold" />}
+                          {isDone && <MaterialIcon name="check" className="text-[10px] font-bold" />}
                         </button>
                         <div className="min-w-0 flex-1">
-                          <p className={cn("text-sm text-[var(--studio-text)] leading-tight", isDone && "line-through text-[var(--studio-muted)]")}>
+                          <p className={cn("text-xs text-[var(--studio-text)] leading-tight", isDone && "line-through text-[var(--studio-muted)]")}>
                             {action.text}
                           </p>
-                          <div className="mt-1.5 flex flex-wrap gap-2 items-center text-[10px] text-[var(--studio-subtle)]">
-                            <span className="truncate max-w-[150px] font-medium text-[var(--studio-secondary)]">
+                          <div className="mt-1 flex flex-wrap gap-1.5 items-center text-[9px] text-[var(--studio-subtle)]">
+                            <span className="truncate max-w-[120px] font-medium text-[var(--studio-secondary)]">
                               {action.meetingTitle}
                             </span>
                             <span>•</span>
@@ -1503,32 +1814,40 @@ ${summary.actionItems.map(a => {
               )}
             </article>
 
-            {/* Weekly Time Analysis section */}
-            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--studio-border)] pb-3">
+            {/* Card 2: Weekly/Monthly Time Spent */}
+            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow flex flex-col h-[350px]">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--studio-border)] pb-3 shrink-0">
                 <div className="flex items-center gap-2">
                   <MaterialIcon name="pending_actions" className="text-base text-[var(--studio-primary)]" />
                   <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--studio-text)]">
-                    {locale === 'en' ? 'Weekly Time Spent' : 'Tempo de Reuniões na Semana'}
+                    {dashboardTimeRange === '7days' 
+                      ? (locale === 'en' ? 'Weekly Time Spent' : 'Tempo na Semana')
+                      : dashboardTimeRange === '30days'
+                        ? (locale === 'en' ? 'Monthly Time Spent' : 'Tempo no Mês')
+                        : (locale === 'en' ? 'Lifetime Time Spent' : 'Tempo Acumulado')}
                   </h3>
                 </div>
                 <span className="rounded-full bg-[var(--studio-primary-soft)] border border-[var(--studio-primary-border)] px-2 py-0.5 text-xs text-[var(--studio-primary)] font-semibold">
-                  {locale === 'en' ? 'Last 7 Days' : 'Últimos 7 Dias'}
+                  {dashboardTimeRange === '7days' 
+                    ? (locale === 'en' ? 'Last 7 Days' : 'Últimos 7 Dias') 
+                    : dashboardTimeRange === '30days'
+                      ? (locale === 'en' ? 'Last 30 Days' : 'Últimos 30 Dias')
+                      : (locale === 'en' ? 'All Time' : 'Todo o Histórico')}
                 </span>
               </div>
 
-              <div className="space-y-4">
+              <div className="flex-1 flex flex-col justify-between">
                 {/* Total Stats comparative bar */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                      {locale === 'en' ? 'Productive:' : 'Produtivo:'}{' '}
+                <div className="space-y-1.5 shrink-0">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      {locale === 'en' ? 'Prod:' : 'Prod:'}{' '}
                       {formatDashboardTime(timeTotals.productive)} ({timeTotals.total > 0 ? Math.round((timeTotals.productive / timeTotals.total) * 100) : 0}%)
                     </span>
-                    <span className="text-red-400 font-semibold flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-red-500" />
-                      {locale === 'en' ? 'Unproductive:' : 'Improdutivo:'}{' '}
+                    <span className="text-red-400 font-semibold flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                      {locale === 'en' ? 'Improd:' : 'Improd:'}{' '}
                       {formatDashboardTime(timeTotals.unproductive)} ({timeTotals.total > 0 ? Math.round((timeTotals.unproductive / timeTotals.total) * 100) : 0}%)
                     </span>
                   </div>
@@ -1551,27 +1870,36 @@ ${summary.actionItems.map(a => {
                 </div>
 
                 {/* Day-by-day vertical bars */}
-                <div className="relative pt-4">
+                <div className="relative flex-1 mt-4 flex flex-col justify-end">
                   {/* Grid Lines for reference (Y Axis) */}
-                  <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8 pt-2 opacity-5">
+                  <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-7 pt-2 opacity-5">
                     <div className="border-t border-dashed border-white w-full" />
                     <div className="border-t border-dashed border-white w-full" />
                     <div className="border-t border-dashed border-white w-full" />
                   </div>
 
-                  <div className="grid grid-cols-7 gap-2 items-end h-32 relative z-10">
+                  <div className="grid grid-cols-7 gap-1.5 items-end h-28 relative z-10">
                     {(() => {
                       const maxDayTotal = Math.max(...weeklyTimeStats.map(s => s.total), 1)
                       return weeklyTimeStats.map((stat, idx) => {
                         const hasMeetings = stat.total > 0
                         const pctProd = hasMeetings ? (stat.productive / stat.total) * 100 : 0
                         const pctUnprod = hasMeetings ? (stat.unproductive / stat.total) * 100 : 0
+                        const isFiltered = selectedDayFilter === stat.key
                         
                         return (
-                          <div key={idx} className="flex flex-col items-center gap-1.5 h-full justify-end cursor-pointer group relative">
-                            {/* Detailed Day Tooltip */}
-                            <div className="absolute bottom-full mb-2 hidden group-hover:block z-20 w-44 bg-[var(--studio-panel-strong)] border border-[color:var(--studio-border)] rounded-lg p-2.5 text-[10px] text-[var(--studio-text)] shadow-xl leading-relaxed">
-                              <p className="font-bold text-zinc-200 border-b border-[color:var(--studio-border)] pb-1 mb-1.5">{stat.label} ({stat.dateStr})</p>
+                          <div 
+                            key={idx} 
+                            onClick={() => {
+                              if (hasMeetings) {
+                                setSelectedDayFilter(prev => prev === stat.key ? null : stat.key)
+                              }
+                            }}
+                            className="flex flex-col items-center gap-1 h-full justify-end cursor-pointer group relative"
+                          >
+                            {/* Detailed Tooltip */}
+                            <div className="absolute bottom-full mb-1.5 hidden group-hover:block z-20 w-40 bg-[var(--studio-panel-strong)] border border-[color:var(--studio-border)] rounded-lg p-2 text-[9px] text-[var(--studio-text)] shadow-xl leading-relaxed">
+                              <p className="font-bold text-zinc-200 border-b border-[color:var(--studio-border)] pb-1 mb-1">{stat.label} ({stat.dateStr})</p>
                               <p className="text-emerald-400 flex items-center gap-1">
                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                                 {locale === 'en' ? 'Productive:' : 'Produtivo:'} <strong>{formatDashboardTime(stat.productive)}</strong>
@@ -1580,7 +1908,7 @@ ${summary.actionItems.map(a => {
                                 <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
                                 {locale === 'en' ? 'Unproductive:' : 'Improdutivo:'} <strong>{formatDashboardTime(stat.unproductive)}</strong>
                               </p>
-                              <p className="mt-1 border-t border-[color:var(--studio-border)]/50 pt-1 font-extrabold text-[var(--studio-secondary)] flex justify-between">
+                              <p className="mt-0.5 border-t border-[color:var(--studio-border)]/50 pt-0.5 font-bold text-[var(--studio-secondary)] flex justify-between">
                                 <span>Total:</span>
                                 <span>{formatDashboardTime(stat.total)}</span>
                               </p>
@@ -1590,7 +1918,12 @@ ${summary.actionItems.map(a => {
                             <div className="w-full flex-1 flex flex-col justify-end">
                               {hasMeetings ? (
                                 <div 
-                                  className="w-full bg-[var(--studio-panel-strong)] rounded-t-md flex flex-col overflow-hidden border border-[color:var(--studio-border)]/50 group-hover:border-[var(--studio-primary-border)] transition-all"
+                                  className={cn(
+                                    "w-full bg-[var(--studio-panel-strong)] rounded-t flex flex-col overflow-hidden border transition-all duration-300",
+                                    isFiltered
+                                      ? "border-[var(--studio-primary)] shadow-glow-primary scale-105"
+                                      : "border-[color:var(--studio-border)]/50 group-hover:border-[var(--studio-primary-border)]"
+                                  )}
                                   style={{ height: `${(stat.total / maxDayTotal) * 100}%` }}
                                 >
                                   {/* Unproductive at top */}
@@ -1605,12 +1938,15 @@ ${summary.actionItems.map(a => {
                                   />
                                 </div>
                               ) : (
-                                <div className="h-1.5 w-1.5 rounded-full bg-zinc-800 opacity-40 mx-auto" />
+                                <div className="h-1 w-1 rounded-full bg-zinc-800 opacity-45 mx-auto" />
                               )}
                             </div>
 
                             {/* Label */}
-                            <span className="text-[10px] font-bold text-[var(--studio-muted)] group-hover:text-[var(--studio-text)] transition-colors select-none">
+                            <span className={cn(
+                              "text-[8px] font-bold transition-colors select-none",
+                              isFiltered ? "text-[var(--studio-primary)]" : "text-[var(--studio-muted)] group-hover:text-[var(--studio-text)]"
+                            )}>
                               {stat.label}
                             </span>
                           </div>
@@ -1619,15 +1955,104 @@ ${summary.actionItems.map(a => {
                     })()}
                   </div>
                 </div>
+
+                {/* Comparative period trend metrics */}
+                {trendMetrics && trendMetrics.hasPrevData && (
+                  <div className="flex items-center justify-between text-[9px] text-[var(--studio-muted)] pt-2 mt-2 border-t border-[color:var(--studio-border)]/30 shrink-0">
+                    <span className="flex items-center gap-0.5">
+                      <MaterialIcon name="history" className="text-[10px]" />
+                      {locale === 'en' ? 'vs. prev period:' : 'vs. anterior:'}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn(
+                        "font-bold flex items-center",
+                        trendMetrics.durationDelta <= 0 ? "text-emerald-400" : "text-amber-400"
+                      )}>
+                        <MaterialIcon name={trendMetrics.durationDelta <= 0 ? "arrow_downward" : "arrow_upward"} className="text-[9px]" />
+                        {Math.abs(trendMetrics.durationDelta)}% {locale === 'en' ? 'time' : 'tempo'}
+                      </span>
+                      <span>•</span>
+                      <span className={cn(
+                        "font-bold flex items-center",
+                        trendMetrics.countDelta <= 0 ? "text-emerald-400" : "text-amber-400"
+                      )}>
+                        <MaterialIcon name={trendMetrics.countDelta <= 0 ? "arrow_downward" : "arrow_upward"} className="text-[9px]" />
+                        {Math.abs(trendMetrics.countDelta)}% {locale === 'en' ? 'reuns' : 'reuns'}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </article>
-          </div>
 
-          {/* Row 2: Categories and Quality/Hot Topics */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Meeting Categories */}
-            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow">
-              <div className="mb-4 flex items-center justify-between border-b border-[color:var(--studio-border)] pb-3">
+            {/* Card 3: Focus & Waste Analysis */}
+            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow flex flex-col h-[350px]">
+              <div className="mb-4 flex items-center justify-between border-b border-[color:var(--studio-border)] pb-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <MaterialIcon name="psychology" className="text-base text-[var(--studio-primary)]" />
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--studio-text)]">
+                    {locale === 'en' ? 'Focus & Waste Analysis' : 'Foco e Desperdício'}
+                  </h3>
+                </div>
+                <span className="rounded-full bg-[var(--studio-primary-soft)] border border-[var(--studio-primary-border)] px-2 py-0.5 text-xs text-[var(--studio-primary)] font-semibold">
+                  {focusMetrics.avgFocus}% Focus
+                </span>
+              </div>
+              
+              <div className="flex-1 flex flex-col justify-between overflow-hidden">
+                {/* Focus Score progress bar */}
+                <div className="space-y-1.5 shrink-0">
+                  <div className="flex items-center justify-between text-xs font-semibold">
+                    <span className="text-[var(--studio-text)]">
+                      {locale === 'en' ? 'Average Focus Score' : 'Score de Foco Médio'}
+                    </span>
+                    <span className="text-[var(--studio-primary)] font-mono">{focusMetrics.avgFocus}%</span>
+                  </div>
+                  <div className="h-2 w-full bg-[var(--studio-panel-strong)] rounded-full overflow-hidden border border-[color:var(--studio-border)]/50">
+                    <div 
+                      className="h-full bg-gradient-to-r from-[var(--studio-primary)] to-emerald-400 rounded-full transition-all duration-500"
+                      style={{ width: `${focusMetrics.avgFocus}%` }}
+                    />
+                  </div>
+                  <p className="text-[9px] text-[var(--studio-muted)] leading-tight">
+                    {locale === 'en' 
+                      ? 'Measures meeting alignment with agenda topics and dialogue concentration.' 
+                      : 'Mede o alinhamento das discussões com a pauta e a concentração dos participantes.'}
+                  </p>
+                </div>
+
+                {/* Risks & Blockers List */}
+                <div className="flex-1 flex flex-col justify-end mt-4 overflow-hidden">
+                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--studio-subtle)] flex items-center gap-1 mb-2 shrink-0">
+                    <MaterialIcon name="warning" className="text-xs text-amber-400" />
+                    {locale === 'en' ? 'Active Risks & Impediments' : 'Riscos e Impedimentos'}
+                  </h4>
+                  {focusMetrics.risks.length === 0 ? (
+                    <div className="flex-1 flex items-center justify-center border border-dashed border-[color:var(--studio-border)]/40 rounded-lg p-4">
+                      <p className="text-xs text-[var(--studio-muted)] italic text-center">
+                        {locale === 'en' ? 'No risks detected in this range.' : 'Nenhum risco detectado no período.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                      {focusMetrics.risks.map((r, i) => (
+                        <div key={i} className="rounded border border-amber-500/10 bg-amber-500/5 p-2 text-[10px] flex flex-col gap-0.5">
+                          <div className="flex items-center justify-between font-bold text-amber-400">
+                            <span className="truncate max-w-[150px]">{r.risk}</span>
+                            <span className="text-[7px] px-1 rounded bg-amber-500/20 text-amber-300 uppercase shrink-0">{r.impact}</span>
+                          </div>
+                          <p className="text-[8px] text-[var(--studio-subtle)] truncate">{r.meetingTitle}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </article>
+
+            {/* Card 4: Meeting Categories */}
+            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow flex flex-col h-[350px]">
+              <div className="mb-4 flex items-center justify-between border-b border-[color:var(--studio-border)] pb-3 shrink-0">
                 <div className="flex items-center gap-2">
                   <MaterialIcon name="category" className="text-base text-[var(--studio-primary)]" />
                   <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--studio-text)]">
@@ -1636,34 +2061,33 @@ ${summary.actionItems.map(a => {
                 </div>
               </div>
 
-              {meetingTypeStats.length === 0 ? (
-                <div className="py-8 text-center text-sm text-[var(--studio-muted)]">
+              {categoryTimeBreakdown.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-sm text-[var(--studio-muted)]">
                   {locale === 'en' ? 'No category data.' : 'Sem dados de categorias.'}
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="flex-1 flex flex-col justify-between overflow-hidden">
                   {/* Category breakdown bar charts */}
-                  <div className="space-y-4">
-                    {meetingTypeStats.map((stat, index) => {
-                      const percentage = Math.round((stat.value / meetings.length) * 100)
+                  <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                    {categoryTimeBreakdown.map((stat, index) => {
                       const isTargetType = stat.name.toLowerCase().includes('daily') || stat.name.toLowerCase().includes('1:1')
                       const colorClass = isTargetType ? 'from-[var(--studio-primary)] to-emerald-400' : 'from-[var(--studio-secondary)] to-violet-400'
                       
                       return (
-                        <div key={stat.name} className="space-y-2">
-                          <div className="flex items-center justify-between text-xs font-semibold">
-                            <span className="text-[var(--studio-text)] flex items-center gap-1.5">
-                              <span className={cn("h-2.5 w-2.5 rounded-full bg-gradient-to-r", colorClass)} />
+                        <div key={stat.name} className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] font-semibold">
+                            <span className="text-[var(--studio-text)] flex items-center gap-1 shrink-0 truncate max-w-[120px]">
+                              <span className={cn("h-2 w-2 rounded-full bg-gradient-to-r shrink-0", colorClass)} />
                               {stat.name}
                             </span>
-                            <span className="text-[var(--studio-muted)] font-mono">
-                              {stat.value} {stat.value === 1 ? (locale === 'en' ? 'session' : 'sessão') : (locale === 'en' ? 'sessions' : 'sessões')} ({percentage}%)
+                            <span className="text-[var(--studio-muted)] font-mono text-[10px] text-right truncate">
+                              {formatDashboardTime(stat.duration)} • {stat.count} {locale === 'en' ? 'sessions' : 'sessões'} ({stat.percentage}%)
                             </span>
                           </div>
-                          <div className="h-3 w-full bg-[var(--studio-panel-strong)] rounded-full overflow-hidden border border-[color:var(--studio-border)]/50">
+                          <div className="h-2 w-full bg-[var(--studio-panel-strong)] rounded-full overflow-hidden border border-[color:var(--studio-border)]/50">
                             <div 
-                              className={cn("h-full bg-gradient-to-r rounded-full transition-all duration-500")}
-                              style={{ width: `${percentage}%` }}
+                              className={cn("h-full bg-gradient-to-r rounded-full transition-all duration-500", colorClass)}
+                              style={{ width: `${stat.percentage}%` }}
                             />
                           </div>
                         </div>
@@ -1672,15 +2096,15 @@ ${summary.actionItems.map(a => {
                   </div>
 
                   {/* Summary insight note */}
-                  <div className="rounded-lg bg-[var(--studio-panel)] p-4 border border-[color:var(--studio-border)]">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--studio-text)] mb-1.5 flex items-center gap-1">
-                      <MaterialIcon name="psychology" className="text-sm text-[var(--studio-primary)]" />
+                  <div className="rounded-lg bg-[var(--studio-panel)] p-3 border border-[color:var(--studio-border)] shrink-0 mt-3">
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--studio-text)] mb-1 flex items-center gap-1">
+                      <MaterialIcon name="psychology" className="text-xs text-[var(--studio-primary)]" />
                       {locale === 'en' ? 'AI Health Insight' : 'Insight de Produtividade'}
                     </h4>
-                    <p className="text-xs text-[var(--studio-muted)] leading-relaxed">
+                    <p className="text-[10px] text-[var(--studio-muted)] leading-tight">
                       {locale === 'en' 
-                        ? `You have a rich focus on ${meetingTypeStats[0]?.name || 'General'} meetings. The average meeting efficiency sits at a strong ${averageEfficiency || 'N/A'}. A total of ${totalDecisions} decisions were taken across all recorded sessions.` 
-                        : `Foco predominante em reuniões do tipo "${meetingTypeStats[0]?.name || 'Geral'}". A eficiência geral média das suas interações está em ${averageEfficiency || 'N/A'}. Mantenha as discussões focadas para reduzir o tempo total de gravação.`
+                        ? `Focus on ${categoryTimeBreakdown[0]?.name || 'General'} meetings. Efficiency average: ${averageEfficiency || 'N/A'}. Decisions count: ${totalDecisions}.` 
+                        : `Foco predominante em "${categoryTimeBreakdown[0]?.name || 'Geral'}". Eficiência geral média de ${averageEfficiency || 'N/A'}. Total de ${totalDecisions} decisões.`
                       }
                     </p>
                   </div>
@@ -1688,25 +2112,25 @@ ${summary.actionItems.map(a => {
               )}
             </article>
 
-            {/* Quality & Hot Topics Panel */}
-            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow">
-              <div className="mb-4 flex items-center justify-between border-b border-[color:var(--studio-border)] pb-3">
+            {/* Card 5: Quality Index */}
+            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow flex flex-col h-[350px]">
+              <div className="mb-4 flex items-center justify-between border-b border-[color:var(--studio-border)] pb-3 shrink-0">
                 <div className="flex items-center gap-2">
                   <MaterialIcon name="analytics" className="text-base text-[var(--studio-secondary)]" />
                   <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--studio-text)]">
-                    {locale === 'en' ? 'Quality Index & Hot Topics' : 'Índice de Qualidade e Tópicos Quentes'}
+                    {locale === 'en' ? 'Quality Index' : 'Índice de Qualidade'}
                   </h3>
                 </div>
               </div>
               
-              <div className="grid gap-5 sm:grid-cols-[120px_1fr] items-center">
+              <div className="flex-1 flex flex-col items-center justify-center">
                 {/* Average Quality Gauge */}
-                <div className="flex flex-col items-center justify-center text-center p-3 border border-[color:var(--studio-border)]/40 rounded-lg bg-[var(--studio-panel)]/30">
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--studio-subtle)] mb-2.5">
-                    {locale === 'en' ? 'Quality' : 'Qualidade'}
+                <div className="flex flex-col items-center justify-center text-center p-4 border border-[color:var(--studio-border)]/40 rounded-xl bg-[var(--studio-panel)]/30 w-full max-w-[180px]">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--studio-subtle)] mb-2.5">
+                    {locale === 'en' ? 'Avg Quality' : 'Média Geral'}
                   </span>
                   
-                  <div className="relative flex items-center justify-center h-20 w-20">
+                  <div className="relative flex items-center justify-center h-24 w-24">
                     <svg className="absolute transform -rotate-90 w-full h-full" viewBox="0 0 100 100">
                       <circle 
                         cx="50" cy="50" r="40" 
@@ -1722,56 +2146,66 @@ ${summary.actionItems.map(a => {
                         strokeLinecap="round"
                       />
                     </svg>
-                    <div className="text-base font-bold font-mono text-[var(--studio-text)]">
+                    <div className="text-lg font-bold font-mono text-[var(--studio-text)]">
                       {averageQuality || '75%'}
                     </div>
                   </div>
-                  <p className="text-[8px] text-[var(--studio-subtle)] mt-2 leading-tight">
-                    {locale === 'en' ? 'Avg Quality' : 'Média Geral'}
-                  </p>
                 </div>
+              </div>
+            </article>
 
-                {/* Hot Topics Tag Cloud */}
-                <div className="space-y-2.5">
-                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--studio-subtle)]">
-                    {locale === 'en' ? 'Most Discussed Topics' : 'Nuvem de Tópicos Recorrentes'}
-                  </h4>
-                  {hotTopics.length === 0 ? (
+            {/* Card 6: Hot Topics */}
+            <article className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] glass-card p-5 dashboard-radial-glow flex flex-col h-[350px]">
+              <div className="mb-4 flex items-center justify-between border-b border-[color:var(--studio-border)] pb-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <MaterialIcon name="tag" className="text-base text-[var(--studio-primary)]" />
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--studio-text)]">
+                    {locale === 'en' ? 'Hot Topics' : 'Tópicos Quentes'}
+                  </h3>
+                </div>
+              </div>
+              
+              <div className="flex-1 flex flex-col justify-between overflow-hidden">
+                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--studio-subtle)] mb-2 shrink-0">
+                  {locale === 'en' ? 'Most Discussed Topics' : 'Nuvem de Tópicos Recorrentes'}
+                </h4>
+                {hotTopics.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center">
                     <p className="text-xs text-[var(--studio-muted)] italic">
                       {locale === 'en' ? 'No topics analyzed yet.' : 'Nenhum tópico analisado ainda.'}
                     </p>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5 p-2.5 rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)]/20 min-h-[90px] items-center content-center">
-                      {hotTopics.slice(0, 10).map((topic, idx) => {
-                        const sizes = ['text-xs font-semibold px-2 py-1', 'text-[11px] font-medium px-1.5 py-0.5', 'text-[10px] px-1 py-0.5']
-                        const sizeClass = idx < 2 ? sizes[0] : idx < 5 ? sizes[1] : sizes[2]
-                        const variantColors = [
-                          'bg-[var(--studio-primary-soft)] border-[var(--studio-primary-border)] text-[var(--studio-primary)] shadow-glow-primary',
-                          'bg-[var(--studio-secondary-soft)] border-[var(--studio-secondary-border)] text-[var(--studio-secondary)] shadow-glow-secondary',
-                          'bg-cyan-500/5 border-cyan-500/20 text-cyan-400',
-                          'bg-amber-500/5 border-amber-500/20 text-amber-400',
-                          'bg-zinc-500/5 border-zinc-500/20 text-[var(--studio-text)]'
-                        ]
-                        const colorClass = variantColors[idx % variantColors.length]
-                        
-                        return (
-                          <span 
-                            key={topic.name} 
-                            className={cn(
-                              "rounded border transition-all duration-300 hover:scale-105 select-none",
-                              sizeClass,
-                              colorClass
-                            )}
-                            title={`${topic.count} ${topic.count === 1 ? 'mencionada' : 'mencionadas'}`}
-                          >
-                            {topic.name}
-                            <span className="ml-1 font-mono text-[8px] opacity-65">({topic.count})</span>
-                          </span>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto flex flex-wrap gap-1.5 p-3 rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)]/20 items-center content-center">
+                    {hotTopics.slice(0, 10).map((topic, idx) => {
+                      const sizes = ['text-xs font-semibold px-2 py-1', 'text-[11px] font-medium px-1.5 py-0.5', 'text-[10px] px-1 py-0.5']
+                      const sizeClass = idx < 2 ? sizes[0] : idx < 5 ? sizes[1] : sizes[2]
+                      const variantColors = [
+                        'bg-[var(--studio-primary-soft)] border-[var(--studio-primary-border)] text-[var(--studio-primary)] shadow-glow-primary',
+                        'bg-[var(--studio-secondary-soft)] border-[var(--studio-secondary-border)] text-[var(--studio-secondary)] shadow-glow-secondary',
+                        'bg-cyan-500/5 border-cyan-500/20 text-cyan-400',
+                        'bg-amber-500/5 border-amber-500/20 text-amber-400',
+                        'bg-zinc-500/5 border-zinc-500/20 text-[var(--studio-text)]'
+                      ]
+                      const colorClass = variantColors[idx % variantColors.length]
+                      
+                      return (
+                        <span 
+                          key={topic.name} 
+                          className={cn(
+                            "rounded border transition-all duration-300 hover:scale-105 select-none",
+                            sizeClass,
+                            colorClass
+                          )}
+                          title={`${topic.count} ${topic.count === 1 ? 'mencionada' : 'mencionadas'}`}
+                        >
+                          {topic.name}
+                          <span className="ml-1 font-mono text-[8px] opacity-65">(+{topic.count})</span>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </article>
           </div>
