@@ -59,6 +59,7 @@
 ```
 
 - **Listagem de modelos em tempo real** para cada provedor
+- **Identificação de modelos gratuitos** no gateway OpenRouter, exibindo o selo `(GRÁTIS)` / `(FREE)` para uso sem custos de tokens
 - **Fallback automático** entre modelos Gemini configuráveis
 - **Chave via servidor** (`.env.local`) ou **chave da sessão** do navegador
 - **Rate limiting** por IP para proteção em produção
@@ -155,6 +156,7 @@ Prompt otimizado para reuniões one-on-one com foco em:
 - **Armazenamento robusto** — IndexedDB como storage primário com fallback automático para localStorage
 - **Migração transparente** — Dados legados são migrados automaticamente para IndexedDB
 - **Histórico completo** — Até 50 reuniões armazenadas localmente
+- **Horário de início visível** — Exibição do horário exato de início (ex: "Hoje às 18:24" / "Ontem às 14:30") nas listas e detalhes, com a duração exibida ao lado
 - **Busca full-text** — Busque por conteúdo, participantes, tópicos, empresas
 - **Filtros temporais** — Hoje, esta semana, este mês, todas
 - **Filtro por empresa** — Visualize reuniões segregadas por empresa/projeto
