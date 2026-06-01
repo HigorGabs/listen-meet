@@ -657,10 +657,7 @@ export default function Home() {
       <StudioCommandRail
         activeTab={activeTab}
         apiKeySourceLabel={apiKeySourceLabel}
-        isConfigured={isConfigured}
         locale={locale}
-        modelName={selectedModelName}
-        modelsCount={models.length}
         onLocaleChange={setLocale}
         onOpenSettings={() => setShowSettings(true)}
         onOpenProfile={() => {
@@ -669,7 +666,6 @@ export default function Home() {
         }}
         onThemeChange={setTheme}
         onTabChange={(tab) => setActiveTab(tab)}
-        providerName={providerLabel(provider)}
         theme={theme}
         userProfile={profile ? { name: profile.name, avatar: profile.avatar, avatarColor: profile.avatarColor } : undefined}
       />

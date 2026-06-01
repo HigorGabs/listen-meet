@@ -102,7 +102,7 @@ export function SessionReadinessPanel({
     },
     {
       label: t.readiness.aiForTranscription,
-      status: isConfigured ? t.common.ready : t.common.pending,
+      status: isConfigured ? t.aiRoute.connected : t.common.pending,
       ready: isConfigured,
       icon: 'smart_toy',
     },

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { StudioCommandRail } from './StudioCommandRail'
 
 describe('StudioCommandRail', () => {
-  it('renders studio navigation and a compact AI route status', async () => {
+  it('renders studio navigation and user profile dropdown', async () => {
     const onTabChange = vi.fn()
     const onOpenSettings = vi.fn()
     const onThemeChange = vi.fn()
@@ -15,16 +15,12 @@ describe('StudioCommandRail', () => {
       <StudioCommandRail
         activeTab="record"
         apiKeySourceLabel="variável do servidor"
-        isConfigured
         locale="pt-BR"
-        modelName="Gemini Flash Latest"
-        modelsCount={37}
         onLocaleChange={onLocaleChange}
         onOpenSettings={onOpenSettings}
         onOpenProfile={onOpenProfile}
         onThemeChange={onThemeChange}
         onTabChange={onTabChange}
-        providerName="Google Gemini"
         theme="dark"
       />
     )
@@ -32,16 +28,10 @@ describe('StudioCommandRail', () => {
     expect(screen.getByText('Estúdio de Gravação')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /gravar reunião/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /histórico/i })).toBeInTheDocument()
-    const routeStatus = screen.getByLabelText(/Rota de IA: Conectado/i)
-    const settingsButton = screen.getByRole('button', { name: /configurações/i })
-    expect(routeStatus).toHaveClass('h-10', 'sm:w-40')
-    expect(settingsButton).toHaveClass('h-10', 'sm:w-auto', 'sm:min-w-40')
+    const profileButton = screen.getByRole('button', { name: /meu perfil/i })
+    expect(profileButton).toHaveClass('h-10', 'w-10', 'rounded-full')
     expect(screen.queryByText('Rota de IA')).not.toBeInTheDocument()
-    expect(screen.getByText('Conectado')).toBeInTheDocument()
-    expect(screen.queryByText('Google Gemini')).not.toBeInTheDocument()
-    expect(screen.queryByText('Gemini Flash Latest')).not.toBeInTheDocument()
     expect(screen.queryByText('variável do servidor')).not.toBeInTheDocument()
-    expect(screen.queryByText('37 modelos')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Tema')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Idioma')).not.toBeInTheDocument()
     expect(screen.queryByText('Padrão')).not.toBeInTheDocument()
@@ -49,7 +39,7 @@ describe('StudioCommandRail', () => {
     expect(screen.queryByLabelText('Cor secundária')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /histórico/i }))
-    await userEvent.click(settingsButton)
+    await userEvent.click(profileButton)
 
     const menu = screen.getByRole('menu')
     expect(menu).toBeInTheDocument()
@@ -78,16 +68,12 @@ describe('StudioCommandRail', () => {
       <StudioCommandRail
         activeTab="record"
         apiKeySourceLabel="server variable"
-        isConfigured
         locale="en"
-        modelName="Gemini Flash Latest"
-        modelsCount={37}
         onLocaleChange={vi.fn()}
         onOpenSettings={vi.fn()}
         onOpenProfile={vi.fn()}
         onThemeChange={vi.fn()}
         onTabChange={vi.fn()}
-        providerName="Google Gemini"
         theme="dark"
       />
     )
@@ -95,11 +81,8 @@ describe('StudioCommandRail', () => {
     expect(screen.getByText('Recording Studio')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /record meeting/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /history/i })).toBeInTheDocument()
-    const routeStatus = screen.getByLabelText(/AI Route: Connected/i)
-    expect(routeStatus).toHaveClass('h-10', 'sm:w-40')
-    expect(screen.getByRole('button', { name: /settings/i })).toHaveClass('h-10', 'sm:w-auto', 'sm:min-w-40')
+    expect(screen.getByRole('button', { name: /profile/i })).toHaveClass('h-10', 'w-10', 'rounded-full')
     expect(screen.queryByText('AI Route')).not.toBeInTheDocument()
-    expect(screen.getByText('Connected')).toBeInTheDocument()
     expect(screen.queryByLabelText('Theme')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Language')).not.toBeInTheDocument()
   })

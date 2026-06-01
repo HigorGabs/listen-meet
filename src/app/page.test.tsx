@@ -152,7 +152,7 @@ describe('Home page studio shell', () => {
   it('opens the AI configuration panel with explicit key source controls', async () => {
     render(<Home />)
 
-    await userEvent.click(await screen.findByRole('button', { name: /configurações/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /meu perfil/i }))
     expect(screen.queryByText('Configurar IA')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('menuitem', { name: /^API$/i }))
 
@@ -169,7 +169,7 @@ describe('Home page studio shell', () => {
     expect(screen.queryByLabelText('Tema')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Idioma')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: /configurações/i }))
+    await userEvent.click(screen.getByRole('button', { name: /meu perfil/i }))
     await userEvent.click(screen.getByRole('menuitem', { name: /white/i }))
     await userEvent.click(screen.getByRole('menuitem', { name: /^EN$/ }))
 
@@ -179,7 +179,7 @@ describe('Home page studio shell', () => {
     expect(localStorage.getItem('listen-meet-palette')).toBeNull()
     expect(screen.getByText('Recording Studio')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Capture center' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /profile/i })).toBeInTheDocument()
   })
 
   it('keeps capture readiness pending until the recorder reports real audio readiness', async () => {
@@ -263,7 +263,7 @@ describe('Home page studio shell', () => {
     render(<Home />)
 
     await screen.findByText('Estúdio de Gravação')
-    await userEvent.click(screen.getByRole('button', { name: /configurações/i }))
+    await userEvent.click(screen.getByRole('button', { name: /meu perfil/i }))
     await userEvent.click(screen.getByRole('menuitem', { name: /^EN$/ }))
     await userEvent.click(screen.getByRole('button', { name: /simular gravação completa/i }))
 
@@ -347,7 +347,7 @@ describe('Home page studio shell', () => {
     render(<Home />)
 
     await screen.findByText('Estúdio de Gravação')
-    await userEvent.click(screen.getByRole('button', { name: /configurações/i }))
+    await userEvent.click(screen.getByRole('button', { name: /meu perfil/i }))
     await userEvent.click(screen.getByRole('menuitem', { name: /^API$/i }))
 
     const providerCombobox = screen.getByRole('combobox', { name: /provedor/i })

@@ -233,8 +233,8 @@ export function UserProfileModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto border-[color:var(--studio-border)] bg-[var(--studio-card)] p-0 text-[var(--studio-text)] shadow-2xl shadow-black/40 sm:max-w-3xl animate-in fade-in zoom-in-95 duration-200">
-        <DialogHeader className="border-b border-[color:var(--studio-border)] bg-[var(--studio-panel)] px-6 py-4 flex flex-row items-center justify-between">
+      <DialogContent className="h-[600px] max-h-[90vh] max-w-3xl flex flex-col border-[color:var(--studio-border)] bg-[var(--studio-card)] p-0 text-[var(--studio-text)] shadow-2xl shadow-black/40 sm:max-w-3xl animate-in fade-in zoom-in-95 duration-200">
+        <DialogHeader className="border-b border-[color:var(--studio-border)] bg-[var(--studio-panel)] px-6 py-4 flex flex-row items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--studio-primary-border)] bg-[var(--studio-primary-soft)]">
               <MaterialIcon name="person" className="text-lg text-[var(--studio-primary)]" />
@@ -252,22 +252,22 @@ export function UserProfileModal({
           </div>
         </DialogHeader>
 
-        <div className="p-6">
+        <div className="flex-1 overflow-y-auto p-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4 border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-1">
-              <TabsTrigger value="profile" className="gap-1.5 text-xs py-1.5">
+            <TabsList className="grid w-full grid-cols-4 h-10 border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-1 shrink-0">
+              <TabsTrigger value="profile" className="gap-1.5 text-xs">
                 <MaterialIcon name="account_circle" className="text-sm" />
                 {locale === 'pt-BR' ? 'Meu Perfil' : 'My Profile'}
               </TabsTrigger>
-              <TabsTrigger value="companies" className="gap-1.5 text-xs py-1.5">
+              <TabsTrigger value="companies" className="gap-1.5 text-xs">
                 <MaterialIcon name="business" className="text-sm" />
                 {locale === 'pt-BR' ? 'Empresas' : 'Companies'}
               </TabsTrigger>
-              <TabsTrigger value="collaborators" className="gap-1.5 text-xs py-1.5">
+              <TabsTrigger value="collaborators" className="gap-1.5 text-xs">
                 <MaterialIcon name="groups" className="text-sm" />
                 {locale === 'pt-BR' ? 'Colaboradores' : 'Collaborators'}
               </TabsTrigger>
-              <TabsTrigger value="preferences" className="gap-1.5 text-xs py-1.5">
+              <TabsTrigger value="preferences" className="gap-1.5 text-xs">
                 <MaterialIcon name="tune" className="text-sm" />
                 {locale === 'pt-BR' ? 'Preferências' : 'Preferences'}
               </TabsTrigger>
@@ -636,7 +636,7 @@ export function UserProfileModal({
           </Tabs>
         </div>
 
-        <DialogFooter className="border-t border-[color:var(--studio-border)] bg-[var(--studio-panel)] px-6 py-4">
+        <DialogFooter className="border-t border-[color:var(--studio-border)] bg-[var(--studio-panel)] px-6 py-4 shrink-0">
           <Button
             type="button"
             onClick={() => onOpenChange(false)}

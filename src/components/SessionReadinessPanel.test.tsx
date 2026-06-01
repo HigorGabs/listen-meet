@@ -79,9 +79,9 @@ describe('SessionReadinessPanel', () => {
       />
     )
 
-    expect(screen.getByText('Conectado')).toBeInTheDocument()
+    expect(screen.getAllByText('Conectado').length).toBe(2)
     expect(screen.getByText('Detectado')).toBeInTheDocument()
-    expect(screen.getAllByText('Pronta').length).toBeGreaterThan(0)
+    expect(screen.getByText('Pronta para transcrição')).toBeInTheDocument()
   })
 
   it('renders the latest processed meeting insight', () => {
