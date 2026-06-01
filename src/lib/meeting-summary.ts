@@ -153,6 +153,8 @@ export interface MeetingRecord {
   audioBlob?: Blob
   filename: string
   company?: string
+  meetingContext?: string
+  template?: 'default' | 'daily' | 'oneOnOne'
 }
 
 export interface MeetingExportInput {

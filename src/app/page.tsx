@@ -189,6 +189,14 @@ export default function Home() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
   const [profileModalTab, setProfileModalTab] = useState('profile')
 
+  // Reprocessing configuration states
+  const [reprocessingMeetingRecord, setReprocessingMeetingRecord] = useState<MeetingRecord | null>(null)
+  const [reprocessTitle, setReprocessTitle] = useState('')
+  const [reprocessCompany, setReprocessCompany] = useState('')
+  const [reprocessTemplate, setReprocessTemplate] = useState<'default' | 'daily' | 'oneOnOne'>('default')
+  const [reprocessParticipants, setReprocessParticipants] = useState('')
+  const [reprocessContext, setReprocessContext] = useState('')
+
   // Load profile on mount
   useEffect(() => {
     const loaded = getProfile()
@@ -637,6 +645,131 @@ export default function Home() {
     }
   }
 
+  const handleReprocessMeeting = async () => {
+    if (!reprocessingMeetingRecord) return
+    const meeting = reprocessingMeetingRecord
+
+    if (!meeting.audioBlob) {
+      showAlert(locale === 'en' ? 'Audio recording not found for this meeting.' : 'A gravação de áudio original não foi encontrada para esta reunião.')
+      return
+    }
+
+    setIsProcessing(true)
+    setProcessingStatus(t.errors.sendingAudio)
+
+    // Set processing status on this meeting specifically
+    setProcessingMeeting({
+      id: meeting.id,
+      title: reprocessTitle.trim() || meeting.title,
+      date: meeting.date,
+      duration: meeting.duration,
+      status: 'processing'
+    })
+
+    // Switch to history tab to show progress
+    setActiveTab('history')
+    setReprocessingMeetingRecord(null) // Close modal
+
+    try {
+      const formData = new FormData()
+      formData.append('audio', meeting.audioBlob, meeting.filename || 'audio.webm')
+      formData.append('provider', provider)
+      formData.append('model', selectedModel)
+      if (apiSource === 'session' && apiKey.trim()) {
+        formData.append('apiKey', apiKey.trim())
+      }
+      formData.append('locale', locale)
+      formData.append('duration', meeting.duration.toString())
+      formData.append('processingMode', 'multimodal')
+
+      // Clean comma-separated participants to a clean array
+      const cleanedParticipants = reprocessParticipants
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean)
+
+      if (cleanedParticipants.length > 0) {
+        formData.append('participants', JSON.stringify(cleanedParticipants))
+      }
+      if (reprocessCompany.trim()) {
+        formData.append('company', reprocessCompany.trim())
+      }
+      if (reprocessTitle.trim()) {
+        formData.append('customTitle', reprocessTitle.trim())
+      }
+      if (reprocessContext.trim()) {
+        formData.append('meetingContext', reprocessContext.trim())
+      }
+      if (reprocessTemplate && reprocessTemplate !== 'default') {
+        formData.append('template', reprocessTemplate)
+      }
+
+      // Inject active user profile and company collaborators
+      if (profile) {
+        if (profile.name) {
+          const userRole = reprocessCompany ? (profile.rolesByCompany[reprocessCompany] || '') : ''
+          formData.append('userProfile', JSON.stringify({ name: profile.name, role: userRole }))
+        }
+        if (reprocessCompany) {
+          const companyCollabs = profile.collaborators
+            .filter((c) => c.company === reprocessCompany)
+            .map((c) => ({ name: c.name, role: c.role }))
+          if (companyCollabs.length > 0) {
+            formData.append('collaborators', JSON.stringify(companyCollabs))
+          }
+        }
+      }
+
+      setProcessingStatus(t.errors.analyzingAudio(providerLabel(provider)))
+
+      const response = await fetch('/api/process-audio', {
+        method: 'POST',
+        headers: {
+          'X-Client-ID': getClientId(),
+        },
+        body: formData
+      })
+
+      const result = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(result?.error || t.errors.processFailure)
+      }
+
+      if (!result?.success) {
+        throw new Error(result.error || t.errors.unknown)
+      }
+
+      setProcessingStatus(t.errors.savingMeeting)
+
+      // Construct updated meeting record, keeping the SAME ID, date, audioBlob, and filename!
+      const updatedMeeting: MeetingRecord = {
+        ...meeting,
+        title: result.summary.title,
+        summary: result.summary,
+        providerName: providerLabel(provider),
+        modelName: selectedModelName || selectedModel,
+        company: reprocessCompany.trim() || undefined,
+        meetingContext: reprocessContext.trim() || undefined,
+        template: reprocessTemplate
+      }
+
+      const saved = await MeetingStorage.saveMeeting(updatedMeeting)
+      if (!saved) {
+        showAlert(t.errors.saveMeetingFailure)
+      }
+
+      setRefreshTrigger((prev) => prev + 1)
+      setProcessingMeeting(null)
+    } catch (err: any) {
+      console.error('Reprocessing error:', err)
+      setProcessingMeeting(null)
+      showAlert(err.message || t.errors.processFailure)
+    } finally {
+      setIsProcessing(false)
+      setProcessingStatus('')
+    }
+  }
+
   if (isCheckingConfig) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--studio-bg)] text-[var(--studio-text)]">
@@ -803,6 +936,17 @@ export default function Home() {
               onNewRecording={() => setActiveTab('record')}
               processingMeeting={processingMeeting}
               refreshTrigger={refreshTrigger}
+              onReprocess={(meeting) => {
+                setReprocessingMeetingRecord(meeting)
+                setReprocessTitle(meeting.summary.title || meeting.title || '')
+                setReprocessCompany(meeting.company || '')
+                setReprocessTemplate(meeting.template || (
+                  meeting.summary.tags?.meetingType === 'Daily Scrum' ? 'daily' :
+                  meeting.summary.tags?.meetingType === '1:1 Feedback' ? 'oneOnOne' : 'default'
+                ))
+                setReprocessParticipants(meeting.summary.participants.join(', '))
+                setReprocessContext(meeting.meetingContext || '')
+              }}
             />
           </div>
         </div>
@@ -1193,6 +1337,172 @@ export default function Home() {
                   {t.common.cancel}
                 </Button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reprocessingMeetingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-card)] shadow-2xl shadow-black/40 text-[var(--studio-text)] animate-in fade-in zoom-in-95 duration-200 max-h-[95vh] overflow-y-auto flex flex-col">
+            <div className="border-b border-[color:var(--studio-border)] px-6 py-4 flex items-center justify-between bg-[var(--studio-panel)]/50 backdrop-blur-md shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--studio-primary-border)] bg-[var(--studio-primary-soft)]">
+                  <MaterialIcon name="psychology" className="text-lg text-[var(--studio-primary)] animate-pulse" />
+                </div>
+                <div className="text-left">
+                  <h2 className="text-lg font-semibold text-[var(--studio-text)] leading-none">
+                    {locale === 'en' ? 'Reprocess Meeting with AI' : 'Reprocessar Reunião com IA'}
+                  </h2>
+                  <p className="mt-1 text-xs text-[var(--studio-muted)] leading-none">
+                    {locale === 'en'
+                      ? 'Adjust parameters and notes to guide the AI before reprocessing.'
+                      : 'Ajuste os parâmetros e notas para guiar a IA antes de reprocessar.'}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setReprocessingMeetingRecord(null)}
+                className="h-8 w-8 p-0 text-[var(--studio-subtle)] hover:bg-[var(--studio-panel)] hover:text-[var(--studio-text)] cursor-pointer rounded-full"
+              >
+                <MaterialIcon name="close" className="text-base" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* 1. Title */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="reprocess-title" className="text-xs font-semibold text-[var(--studio-muted)]">
+                    {locale === 'en' ? 'Meeting Title' : 'Título da Reunião'}
+                  </Label>
+                  <Input
+                    id="reprocess-title"
+                    type="text"
+                    value={reprocessTitle}
+                    onChange={(e) => setReprocessTitle(e.target.value)}
+                    className="border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] h-10 text-sm focus:border-[var(--studio-primary)] font-medium"
+                  />
+                </div>
+
+                {/* 2. Workspace/Company */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="reprocess-company" className="text-xs font-semibold text-[var(--studio-muted)]">
+                    {locale === 'en' ? 'Workspace / Company' : 'Workspace / Empresa'}
+                  </Label>
+                  <select
+                    id="reprocess-company"
+                    className="w-full text-sm rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] px-3 h-10 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer font-medium"
+                    value={reprocessCompany}
+                    onChange={(e) => setReprocessCompany(e.target.value)}
+                  >
+                    <option value="">{locale === 'en' ? 'None (Manual)' : 'Nenhuma (Manual)'}</option>
+                    {profile?.companies.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* 3. Template */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="reprocess-template" className="text-xs font-semibold text-[var(--studio-muted)]">
+                    {locale === 'en' ? 'Meeting Template' : 'Template de Reunião'}
+                  </Label>
+                  <select
+                    id="reprocess-template"
+                    className="w-full text-sm rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] px-3 h-10 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer font-medium"
+                    value={reprocessTemplate}
+                    onChange={(e) => setReprocessTemplate(e.target.value as any)}
+                  >
+                    <option value="default">{locale === 'en' ? 'Default (General)' : 'Padrão (Geral)'}</option>
+                    <option value="daily">{locale === 'en' ? 'Daily Scrum' : 'Daily Scrum'}</option>
+                    <option value="oneOnOne">{locale === 'en' ? '1:1 Feedback' : '1:1 Feedback'}</option>
+                  </select>
+                </div>
+
+                {/* 4. AI Provider & Model */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="reprocess-model" className="text-xs font-semibold text-[var(--studio-muted)]">
+                    {locale === 'en' ? 'AI Engine (Provider / Model)' : 'Motor de IA (Provedor / Modelo)'}
+                  </Label>
+                  <div className="flex gap-2">
+                    <select
+                      className="text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] px-2 h-10 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer flex-1 font-medium"
+                      value={provider}
+                      onChange={(e) => handleProviderChange(e.target.value as AiProviderId)}
+                    >
+                      {AI_PROVIDERS.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    {models.length > 0 && (
+                      <select
+                        className="text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] px-2 h-10 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer flex-1 font-medium"
+                        value={selectedModel}
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                      >
+                        {models.map((m) => (
+                          <option key={m.id} value={m.id}>{m.name || m.id}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Participants */}
+              <div className="space-y-1.5">
+                <Label htmlFor="reprocess-participants" className="text-xs font-semibold text-[var(--studio-muted)]">
+                  {locale === 'en' ? 'Participants (comma-separated)' : 'Participantes (separados por vírgula)'}
+                </Label>
+                <Input
+                  id="reprocess-participants"
+                  type="text"
+                  placeholder={locale === 'en' ? 'e.g. Ana, Bruno, Carlos' : 'Ex: Ana, Bruno, Carlos'}
+                  value={reprocessParticipants}
+                  onChange={(e) => setReprocessParticipants(e.target.value)}
+                  className="border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] h-10 text-sm focus:border-[var(--studio-primary)] font-medium"
+                />
+              </div>
+
+              {/* 6. Context textarea */}
+              <div className="space-y-1.5">
+                <Label htmlFor="reprocess-context" className="text-xs font-semibold text-[var(--studio-muted)]">
+                  {locale === 'en' ? 'AI Objective / Context instructions' : 'Instruções de Contexto / Objetivo para a IA'}
+                </Label>
+                <textarea
+                  id="reprocess-context"
+                  rows={4}
+                  placeholder={
+                    locale === 'en'
+                      ? 'Add extra guidelines here. e.g. "Focus on Notion tasks. Map speakers: Speaker 1 is Higor, Speaker 2 is Julia."'
+                      : 'Adicione diretrizes extras aqui. Ex: "Foque nas pendências do Notion. Mapeie as vozes: Speaker 1 é o Higor, Speaker 2 é a Julia."'
+                  }
+                  value={reprocessContext}
+                  onChange={(e) => setReprocessContext(e.target.value)}
+                  className="w-full text-sm rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] p-3 focus:outline-none focus:border-[var(--studio-primary)] focus:ring-0 resize-y font-medium"
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-[color:var(--studio-border)] bg-[var(--studio-panel)] px-6 py-4 flex justify-end gap-3 shrink-0">
+              <Button
+                variant="outline"
+                onClick={() => setReprocessingMeetingRecord(null)}
+                className="border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] cursor-pointer h-9 text-xs"
+              >
+                {t.common.cancel}
+              </Button>
+              <Button
+                onClick={handleReprocessMeeting}
+                className="bg-[var(--studio-primary)] text-zinc-950 font-semibold hover:opacity-90 cursor-pointer h-9 px-4 text-xs"
+              >
+                {locale === 'en' ? 'Reprocess Now' : 'Reprocessar Agora'}
+              </Button>
             </div>
           </div>
         </div>

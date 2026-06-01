@@ -27,6 +27,7 @@ interface MeetingsListProps {
     status: 'processing'
   } | null
   refreshTrigger?: number
+  onReprocess?: (meeting: MeetingRecord) => void
 }
 
 type DateFilter = 'all' | 'today' | 'week' | 'month'
@@ -134,6 +135,7 @@ export function MeetingsList({
   locale = 'pt-BR',
   processingMeeting = null,
   refreshTrigger = 0,
+  onReprocess,
 }: MeetingsListProps) {
   const t = getMessages(locale)
   const [meetings, setMeetings] = useState<MeetingRecord[]>([])
@@ -1796,40 +1798,53 @@ ${summary.actionItems.map(a => {
                       {formatDate(selectedMeeting.date)} • {formatDuration(selectedMeeting.duration)} • {selectedMeeting.providerName} ({selectedMeeting.modelName})
                     </p>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {onReprocess && selectedMeeting.audioBlob && (
                       <Button
+                        onClick={() => onReprocess(selectedMeeting)}
                         variant="outline"
-                        className="gap-2 h-9 text-xs border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] cursor-pointer"
+                        className="gap-2 h-9 text-xs border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] hover:text-[var(--studio-primary)] hover:border-[var(--studio-primary-border)]/40 cursor-pointer"
                       >
-                        <MaterialIcon name="share" className="text-base" />
-                        {locale === 'en' ? 'Export & Share' : 'Exportar e Compartilhar'}
-                        <MaterialIcon name="arrow_drop_down" className="text-sm" />
+                        <MaterialIcon name="psychology" className="text-base text-[var(--studio-primary)]" />
+                        {locale === 'en' ? 'Reprocess with AI' : 'Reprocessar com IA'}
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56 border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)]">
-                      <DropdownMenuItem onClick={() => handleDownload(selectedMeeting)} className="gap-2 cursor-pointer hover:bg-[var(--studio-panel)]">
-                        <MaterialIcon name="description" className="text-sm" />
-                        {locale === 'en' ? 'Download Text (.txt)' : 'Baixar Texto (.txt)'}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDownloadMarkdown(selectedMeeting)} className="gap-2 cursor-pointer hover:bg-[var(--studio-panel)]">
-                        <MaterialIcon name="markdown" className="text-sm" />
-                        {locale === 'en' ? 'Download Markdown (.md)' : 'Baixar Markdown (.md)'}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDownloadHtml(selectedMeeting)} className="gap-2 cursor-pointer hover:bg-[var(--studio-panel)]">
-                        <MaterialIcon name="html" className="text-sm" />
-                        {locale === 'en' ? 'Download HTML (.html)' : 'Baixar HTML (.html)'}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handlePrint()} className="gap-2 cursor-pointer hover:bg-[var(--studio-panel)]">
-                        <MaterialIcon name="print" className="text-sm" />
-                        {locale === 'en' ? 'Print Report (PDF)' : 'Imprimir Relatório (PDF)'}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleCopySummary(selectedMeeting)} className="gap-2 cursor-pointer hover:bg-[var(--studio-panel)]">
-                        <MaterialIcon name="content_copy" className="text-sm" />
-                        {locale === 'en' ? 'Copy Summary text' : 'Copiar Minuta de Reunião'}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                    )}
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="gap-2 h-9 text-xs border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] cursor-pointer"
+                        >
+                          <MaterialIcon name="share" className="text-base" />
+                          {locale === 'en' ? 'Export & Share' : 'Exportar e Compartilhar'}
+                          <MaterialIcon name="arrow_drop_down" className="text-sm" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56 border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)]">
+                        <DropdownMenuItem onClick={() => handleDownload(selectedMeeting)} className="gap-2 cursor-pointer hover:bg-[var(--studio-panel)]">
+                          <MaterialIcon name="description" className="text-sm" />
+                          {locale === 'en' ? 'Download Text (.txt)' : 'Baixar Texto (.txt)'}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDownloadMarkdown(selectedMeeting)} className="gap-2 cursor-pointer hover:bg-[var(--studio-panel)]">
+                          <MaterialIcon name="markdown" className="text-sm" />
+                          {locale === 'en' ? 'Download Markdown (.md)' : 'Baixar Markdown (.md)'}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDownloadHtml(selectedMeeting)} className="gap-2 cursor-pointer hover:bg-[var(--studio-panel)]">
+                          <MaterialIcon name="html" className="text-sm" />
+                          {locale === 'en' ? 'Download HTML (.html)' : 'Baixar HTML (.html)'}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handlePrint()} className="gap-2 cursor-pointer hover:bg-[var(--studio-panel)]">
+                          <MaterialIcon name="print" className="text-sm" />
+                          {locale === 'en' ? 'Print Report (PDF)' : 'Imprimir Relatório (PDF)'}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleCopySummary(selectedMeeting)} className="gap-2 cursor-pointer hover:bg-[var(--studio-panel)]">
+                          <MaterialIcon name="content_copy" className="text-sm" />
+                          {locale === 'en' ? 'Copy Summary text' : 'Copiar Minuta de Reunião'}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </header>
 
                 {/* Custom Audio Player Card */}
