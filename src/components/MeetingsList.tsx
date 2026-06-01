@@ -34,6 +34,184 @@ type DateFilter = 'all' | 'today' | 'week' | 'month'
 type ViewMode = 'reader' | 'dashboard'
 type DetailTab = 'overview' | 'actions' | 'metrics' | 'transcript' | 'integrations'
 
+interface AudioPlayerProps {
+  audioUrl: string
+  filename: string
+  locale: Locale
+}
+
+const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, filename, locale }) => {
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [audioDuration, setAudioDuration] = useState(0)
+  const [playbackSpeed, setPlaybackSpeed] = useState(1)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  const t = getMessages(locale)
+
+  const togglePlay = () => {
+    if (!audioRef.current) return
+    if (isPlaying) {
+      audioRef.current.pause()
+      setIsPlaying(false)
+    } else {
+      audioRef.current.play().then(() => {
+        setIsPlaying(true)
+      }).catch(err => {
+        console.error('Audio play error:', err)
+      })
+    }
+  }
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime)
+    }
+  }
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setAudioDuration(audioRef.current.duration)
+    }
+  }
+
+  const handleAudioEnded = () => {
+    setIsPlaying(false)
+    setCurrentTime(0)
+  }
+
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = Number(e.target.value)
+    if (audioRef.current) {
+      audioRef.current.currentTime = val
+      setCurrentTime(val)
+    }
+  }
+
+  const changeSpeed = (speed: number) => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed
+      setPlaybackSpeed(speed)
+    }
+  }
+
+  const skipTime = (amount: number) => {
+    if (audioRef.current) {
+      let nextTime = audioRef.current.currentTime + amount
+      if (nextTime < 0) nextTime = 0
+      if (nextTime > audioDuration) nextTime = audioDuration
+      audioRef.current.currentTime = nextTime
+      setCurrentTime(nextTime)
+    }
+  }
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  return (
+    <div className="audio-player mb-6 rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] p-4 space-y-3">
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onEnded={handleAudioEnded}
+        className="hidden"
+      />
+      
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--studio-secondary-soft)] text-[var(--studio-secondary)]">
+            <span className="material-symbols-rounded text-base">music_note</span>
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-[var(--studio-text)] truncate">{filename.replace('.txt', '.webm')}</p>
+            <p className="text-[10px] text-[var(--studio-muted)] uppercase tracking-wider">{locale === 'en' ? 'Meeting Recording' : 'Gravação da Reunião'}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Download Audio Action */}
+          <a
+            href={audioUrl}
+            download={filename.replace('.txt', '.webm')}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-muted)] hover:text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] transition-colors cursor-pointer"
+            title={locale === 'en' ? 'Download audio' : 'Baixar áudio bruto'}
+          >
+            <span className="material-symbols-rounded text-base">download</span>
+          </a>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => skipTime(-10)}
+            className="h-8 w-8 rounded-full text-[var(--studio-muted)] hover:text-[var(--studio-text)] cursor-pointer"
+          >
+            <span className="material-symbols-rounded text-sm">replay_10</span>
+          </Button>
+          <Button
+            size="icon"
+            onClick={togglePlay}
+            className="h-9 w-9 rounded-full bg-[var(--studio-primary)] text-zinc-950 hover:opacity-90 flex items-center justify-center cursor-pointer font-bold shrink-0"
+          >
+            <span className="material-symbols-rounded material-symbols-filled text-base">{isPlaying ? 'pause' : 'play_arrow'}</span>
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => skipTime(10)}
+            className="h-8 w-8 rounded-full text-[var(--studio-muted)] hover:text-[var(--studio-text)] cursor-pointer"
+          >
+            <span className="material-symbols-rounded text-sm">forward_10</span>
+          </Button>
+        </div>
+
+        {/* Slider timeline */}
+        <div className="flex-1 flex items-center gap-2 min-w-0">
+          <span className="font-mono text-[10px] text-[var(--studio-muted)] select-none shrink-0 w-8 text-right">
+            {formatDuration(Math.floor(currentTime))}
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={audioDuration || 100}
+            value={currentTime}
+            onChange={handleSeekChange}
+            className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-[var(--studio-card-alt)] accent-[var(--studio-primary)] focus:outline-none"
+          />
+          <span className="font-mono text-[10px] text-[var(--studio-muted)] select-none shrink-0 w-8">
+            {formatDuration(Math.floor(audioDuration))}
+          </span>
+        </div>
+
+        {/* Playback speed selector */}
+        <div className="flex items-center gap-1 shrink-0 bg-[var(--studio-panel)] border border-[color:var(--studio-border)] rounded-lg p-0.5">
+          {([1, 1.25, 1.5, 2] as const).map((speed) => (
+            <button
+              key={speed}
+              onClick={() => changeSpeed(speed)}
+              className={cn(
+                "px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer",
+                playbackSpeed === speed
+                  ? "bg-[var(--studio-secondary-soft)] text-[var(--studio-secondary)]"
+                  : "text-[var(--studio-muted)] hover:text-[var(--studio-text)]"
+              )}
+            >
+              {speed}x
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function parsePercentage(value?: string): number | null {
   if (!value) return null
 
@@ -222,12 +400,6 @@ export function MeetingsList({
   const [syncStatusSlack, setSyncStatusSlack] = useState('')
   const [syncStatusJira, setSyncStatusJira] = useState('')
 
-  // Audio Player States
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [audioDuration, setAudioDuration] = useState(0)
-  const [playbackSpeed, setPlaybackSpeed] = useState(1)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const filteredMeetings = useMemo(() => meetings.filter((meeting) => {
     const query = searchTerm.toLowerCase()
@@ -290,74 +462,11 @@ export function MeetingsList({
     }
   }, [audioUrl])
 
-  // Reset audio controls and editing states when meeting changes
+  // Reset editing states when meeting changes
   useEffect(() => {
-    setIsPlaying(false)
-    setCurrentTime(0)
-    setAudioDuration(0)
-    setPlaybackSpeed(1)
-    if (audioRef.current) {
-      audioRef.current.playbackRate = 1
-    }
     setIsEditingTitle(false)
     setIsEditingCompany(false)
   }, [selectedMeetingId])
-
-  const togglePlay = () => {
-    if (!audioRef.current) return
-    if (isPlaying) {
-      audioRef.current.pause()
-      setIsPlaying(false)
-    } else {
-      audioRef.current.play().then(() => {
-        setIsPlaying(true)
-      }).catch(err => {
-        console.error('Audio play error:', err)
-      })
-    }
-  }
-
-  const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime)
-    }
-  }
-
-  const handleLoadedMetadata = () => {
-    if (audioRef.current) {
-      setAudioDuration(audioRef.current.duration)
-    }
-  }
-
-  const handleAudioEnded = () => {
-    setIsPlaying(false)
-    setCurrentTime(0)
-  }
-
-  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = Number(e.target.value)
-    if (audioRef.current) {
-      audioRef.current.currentTime = val
-      setCurrentTime(val)
-    }
-  }
-
-  const changeSpeed = (speed: number) => {
-    if (audioRef.current) {
-      audioRef.current.playbackRate = speed
-      setPlaybackSpeed(speed)
-    }
-  }
-
-  const skipTime = (amount: number) => {
-    if (audioRef.current) {
-      let nextTime = audioRef.current.currentTime + amount
-      if (nextTime < 0) nextTime = 0
-      if (nextTime > audioDuration) nextTime = audioDuration
-      audioRef.current.currentTime = nextTime
-      setCurrentTime(nextTime)
-    }
-  }
 
   const loadMeetings = useCallback(async () => {
     const list = await MeetingStorage.getAllMeetings()
@@ -2514,103 +2623,12 @@ ${summary.actionItems.map(a => {
 
                 {/* Custom Audio Player Card */}
                 {audioUrl && (
-                  <div className="audio-player mb-6 rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-panel-strong)] p-4 space-y-3">
-                    <audio
-                      ref={audioRef}
-                      src={audioUrl}
-                      onTimeUpdate={handleTimeUpdate}
-                      onLoadedMetadata={handleLoadedMetadata}
-                      onEnded={handleAudioEnded}
-                      className="hidden"
-                    />
-                    
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--studio-secondary-soft)] text-[var(--studio-secondary)]">
-                          <span className="material-symbols-rounded text-base">music_note</span>
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-[var(--studio-text)] truncate">{selectedMeeting.filename.replace('.txt', '.webm')}</p>
-                          <p className="text-[10px] text-[var(--studio-muted)] uppercase tracking-wider">{locale === 'en' ? 'Meeting Recording' : 'Gravação da Reunião'}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {/* Download Audio Action */}
-                        <a
-                          href={audioUrl}
-                          download={selectedMeeting.filename.replace('.txt', '.webm')}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-muted)] hover:text-[var(--studio-text)] hover:bg-[var(--studio-card-alt)] transition-colors cursor-pointer"
-                          title={locale === 'en' ? 'Download audio' : 'Baixar áudio bruto'}
-                        >
-                          <span className="material-symbols-rounded text-base">download</span>
-                        </a>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => skipTime(-10)}
-                          className="h-8 w-8 rounded-full text-[var(--studio-muted)] hover:text-[var(--studio-text)] cursor-pointer"
-                        >
-                          <span className="material-symbols-rounded text-sm">replay_10</span>
-                        </Button>
-                        <Button
-                          size="icon"
-                          onClick={togglePlay}
-                          className="h-9 w-9 rounded-full bg-[var(--studio-primary)] text-zinc-950 hover:opacity-90 flex items-center justify-center cursor-pointer font-bold shrink-0"
-                        >
-                          <span className="material-symbols-rounded material-symbols-filled text-base">{isPlaying ? 'pause' : 'play_arrow'}</span>
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => skipTime(10)}
-                          className="h-8 w-8 rounded-full text-[var(--studio-muted)] hover:text-[var(--studio-text)] cursor-pointer"
-                        >
-                          <span className="material-symbols-rounded text-sm">forward_10</span>
-                        </Button>
-                      </div>
-
-                      {/* Slider timeline */}
-                      <div className="flex-1 flex items-center gap-2 min-w-0">
-                        <span className="font-mono text-[10px] text-[var(--studio-muted)] select-none shrink-0 w-8 text-right">
-                          {formatDuration(Math.floor(currentTime))}
-                        </span>
-                        <input
-                          type="range"
-                          min={0}
-                          max={audioDuration || 100}
-                          value={currentTime}
-                          onChange={handleSeekChange}
-                          className="flex-1 h-1 rounded-lg appearance-none cursor-pointer bg-[var(--studio-card-alt)] accent-[var(--studio-primary)] focus:outline-none"
-                        />
-                        <span className="font-mono text-[10px] text-[var(--studio-muted)] select-none shrink-0 w-8">
-                          {formatDuration(Math.floor(audioDuration))}
-                        </span>
-                      </div>
-
-                      {/* Playback speed selector */}
-                      <div className="flex items-center gap-1 shrink-0 bg-[var(--studio-panel)] border border-[color:var(--studio-border)] rounded-lg p-0.5">
-                        {([1, 1.25, 1.5, 2] as const).map((speed) => (
-                          <button
-                            key={speed}
-                            onClick={() => changeSpeed(speed)}
-                            className={cn(
-                              "px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer",
-                              playbackSpeed === speed
-                                ? "bg-[var(--studio-secondary-soft)] text-[var(--studio-secondary)]"
-                                : "text-[var(--studio-muted)] hover:text-[var(--studio-text)]"
-                            )}
-                          >
-                            {speed}x
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                  <AudioPlayer
+                    key={selectedMeeting.id}
+                    audioUrl={audioUrl}
+                    filename={selectedMeeting.filename}
+                    locale={locale}
+                  />
                 )}
 
                 {/* Tab selector */}
