@@ -94,7 +94,7 @@ const advancedMetricsMeeting = {
       { phase: 'Fechamento', sentiment: 'Produtivo' },
     ],
     actionItems: [
-      'Refatorar a lateral do console [Responsável: Higor Gabs]',
+      'Refatorar a lateral do console [Responsável: Higor Dev]',
       'Configurar vitest em ambiente CI [Responsável: Ana]',
     ],
   },
@@ -103,11 +103,6 @@ const advancedMetricsMeeting = {
 describe('MeetingsList', () => {
   beforeEach(() => {
     mockMeetingStorage.getAllMeetings.mockResolvedValue([])
-    try {
-      const fs = require('fs')
-      fs.appendFileSync('/Users/higor/Desktop/PROJETOSDESK/Listen-meet/debug-filter-log.txt', '\n\n=================== NEW TEST ===================\n\n')
-      fs.appendFileSync('/Users/higor/Desktop/PROJETOSDESK/Listen-meet/debug-load-log.txt', '\n\n=================== NEW TEST ===================\n\n')
-    } catch {}
   })
 
   it('renders a studio empty state with a recording action', async () => {
@@ -191,7 +186,7 @@ describe('MeetingsList', () => {
 
     // Assert clean action items (without brackets) and responsible badges are present
     expect(screen.getByText('Refatorar a lateral do console')).toBeInTheDocument()
-    expect(screen.getByText('Higor Gabs')).toBeInTheDocument()
+    expect(screen.getByText('Higor Dev')).toBeInTheDocument()
     expect(screen.getByText('Configurar vitest em ambiente CI')).toBeInTheDocument()
     expect(screen.getByText('Ana')).toBeInTheDocument()
 
@@ -236,7 +231,7 @@ describe('MeetingsList', () => {
 
     // Change name and role
     await userEvent.clear(nameInput)
-    await userEvent.type(nameInput, 'Higor Gabs')
+    await userEvent.type(nameInput, 'Higor Dev')
     await userEvent.clear(roleInput)
     await userEvent.type(roleInput, 'Tech Lead')
 
@@ -247,9 +242,9 @@ describe('MeetingsList', () => {
     // Assert storage save was called with the updated name
     expect(mockMeetingStorage.saveMeeting).toHaveBeenCalled()
     const saved = mockMeetingStorage.saveMeeting.mock.calls[0][0]
-    expect(saved.summary.participationAnalysis?.[0]?.participant).toBe('Higor Gabs')
+    expect(saved.summary.participationAnalysis?.[0]?.participant).toBe('Higor Dev')
     expect(saved.summary.participationAnalysis?.[0]?.role).toBe('Tech Lead')
-    expect(saved.summary.participants).toContain('Higor Gabs')
+    expect(saved.summary.participants).toContain('Higor Dev')
   })
 
   it('filters meeting list by selected company and updates dashboard analytics', async () => {

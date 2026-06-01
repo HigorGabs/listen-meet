@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MaterialIcon } from '@/components/ui/material-icon'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
 import { getMessages, type Locale } from '@/lib/i18n'
 import {
   UserProfile,
@@ -56,6 +57,12 @@ export function UserProfileModal({
   const [newCollabRole, setNewCollabRole] = useState('')
   const [newCollabCompany, setNewCollabCompany] = useState('')
   
+  // Local state for editing collaborator
+  const [editingCollabId, setEditingCollabId] = useState<string | null>(null)
+  const [editingCollabName, setEditingCollabName] = useState('')
+  const [editingCollabRole, setEditingCollabRole] = useState('')
+  const [editingCollabCompany, setEditingCollabCompany] = useState('')
+  
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Load profile on open
@@ -64,6 +71,7 @@ export function UserProfileModal({
       const loaded = getProfile()
       setProfile(loaded)
       setActiveTab(defaultTab)
+      setEditingCollabId(null)
       if (loaded.companies.length > 0) {
         setNewCollabCompany(loaded.defaultCompany || loaded.companies[0])
       } else {
@@ -223,6 +231,38 @@ export function UserProfileModal({
     })
   }
 
+  // Start editing collaborator
+  const handleStartEditCollab = (collab: Collaborator) => {
+    setEditingCollabId(collab.id)
+    setEditingCollabName(collab.name)
+    setEditingCollabRole(collab.role)
+    setEditingCollabCompany(collab.company)
+  }
+
+  // Save collaborator edit
+  const handleSaveCollaboratorEdit = () => {
+    if (!editingCollabId || !editingCollabName.trim()) return
+
+    const updatedCollabs = profile.collaborators.map((c) => {
+      if (c.id === editingCollabId) {
+        return {
+          ...c,
+          name: editingCollabName.trim(),
+          role: editingCollabRole.trim(),
+          company: editingCollabCompany || 'outros',
+        }
+      }
+      return c
+    })
+
+    handleSave({
+      ...profile,
+      collaborators: updatedCollabs,
+    })
+
+    setEditingCollabId(null)
+  }
+
   // Get initials for avatar
   const getInitials = () => {
     if (!profile.name) return 'EU'
@@ -233,7 +273,7 @@ export function UserProfileModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[600px] max-h-[90vh] max-w-3xl flex flex-col border-[color:var(--studio-border)] bg-[var(--studio-card)] p-0 text-[var(--studio-text)] shadow-2xl shadow-black/40 sm:max-w-3xl animate-in fade-in zoom-in-95 duration-200">
+      <DialogContent className="h-[700px] max-h-[90vh] max-w-4xl flex flex-col border-[color:var(--studio-border)] bg-[var(--studio-card)] p-0 text-[var(--studio-text)] shadow-2xl shadow-black/40 sm:max-w-4xl animate-in fade-in zoom-in-95 duration-200">
         <DialogHeader className="border-b border-[color:var(--studio-border)] bg-[var(--studio-panel)] px-6 py-4 flex flex-row items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--studio-primary-border)] bg-[var(--studio-primary-soft)]">
@@ -275,70 +315,77 @@ export function UserProfileModal({
 
             {/* TAB: PROFILE */}
             <TabsContent value="profile" className="space-y-6 outline-none focus:outline-none">
-              <div className="flex flex-col sm:flex-row items-center gap-6 rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-5">
-                <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleAvatarUpload}
-                    accept="image/*"
-                    className="hidden"
-                  />
-                  {profile.avatar ? (
-                    <img
-                      src={profile.avatar}
-                      alt="Avatar"
-                      className="h-20 w-20 rounded-full object-cover border-2 border-[var(--studio-primary-border)] shadow-glow-primary transition duration-300 group-hover:opacity-80"
+              <div className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-panel)]/50 p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row items-center gap-6">
+                  {/* Left: Avatar Upload container */}
+                  <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current?.click()}>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleAvatarUpload}
+                      accept="image/*"
+                      className="hidden"
                     />
-                  ) : (
-                    <div
-                      className={cn(
-                        'flex h-20 w-20 items-center justify-center rounded-full border-2 border-[color:var(--studio-border)] bg-gradient-to-tr text-2xl font-bold text-white shadow-lg transition duration-300 group-hover:opacity-85',
-                        profile.avatarColor || AVATAR_GRADIENTS[0]
-                      )}
-                    >
-                      {getInitials()}
+                    {profile.avatar ? (
+                      <img
+                        src={profile.avatar}
+                        alt="Avatar"
+                        className="h-24 w-24 rounded-full object-cover border-2 border-[var(--studio-primary-border)] shadow-[0_0_15px_rgba(var(--studio-primary-rgb),0.2)] transition duration-300 group-hover:opacity-80"
+                      />
+                    ) : (
+                      <div
+                        className={cn(
+                          'flex h-24 w-24 items-center justify-center rounded-full border-2 border-[color:var(--studio-border)] bg-gradient-to-tr text-3xl font-bold text-white shadow-lg transition duration-300 group-hover:opacity-85',
+                          profile.avatarColor || AVATAR_GRADIENTS[0]
+                        )}
+                      >
+                        {getInitials()}
+                      </div>
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <MaterialIcon name="photo_camera" className="text-white text-xl animate-pulse" />
                     </div>
-                  )}
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <MaterialIcon name="photo_camera" className="text-white text-lg" />
-                  </div>
-                </div>
-
-                <div className="flex-1 space-y-3 w-full">
-                  <div className="space-y-1">
-                    <Label htmlFor="profile-name" className="text-xs font-semibold text-[var(--studio-muted)]">
-                      {locale === 'pt-BR' ? 'Seu Nome completo' : 'Your Full Name'}
-                    </Label>
-                    <Input
-                      id="profile-name"
-                      type="text"
-                      placeholder={locale === 'pt-BR' ? 'Ex: Higor Gabs' : 'e.g. Higor Gabs'}
-                      value={profile.name}
-                      onChange={(e) => handleNameChange(e.target.value)}
-                      className="border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] h-9 text-sm focus:border-[var(--studio-primary)]"
-                    />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <span className="text-[10px] font-bold text-[var(--studio-muted)] uppercase tracking-wider block">
-                      {locale === 'pt-BR' ? 'Ou escolha cores de gradiente' : 'Or select preset gradient colors'}
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {AVATAR_GRADIENTS.map((grad, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => handleAvatarColorSelect(grad)}
-                          className={cn(
-                            'h-6 w-6 rounded-full bg-gradient-to-tr border transition duration-300 hover:scale-110 cursor-pointer',
-                            grad,
-                            profile.avatarColor === grad && !profile.avatar
-                              ? 'border-white scale-105 shadow-md'
-                              : 'border-transparent'
-                          )}
-                        />
-                      ))}
+                  {/* Right: Identity information */}
+                  <div className="flex-1 space-y-4 w-full">
+                    <div className="space-y-1">
+                      <Label htmlFor="profile-name" className="text-xs font-semibold text-[var(--studio-muted)]">
+                        {locale === 'pt-BR' ? 'Seu Nome completo' : 'Your Full Name'}
+                      </Label>
+                      <Input
+                        id="profile-name"
+                        type="text"
+                        placeholder={locale === 'pt-BR' ? 'Ex: Higor' : 'e.g. Higor'}
+                        value={profile.name}
+                        onChange={(e) => handleNameChange(e.target.value)}
+                        className="border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] h-10 text-sm focus:border-[var(--studio-primary)]"
+                      />
+                      <p className="text-[10px] text-[var(--studio-subtle)] leading-normal">
+                        {locale === 'pt-BR' ? 'O nome que será usado para identificar suas falas nas reuniões.' : 'The name used to identify your voice in meetings.'}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-bold text-[var(--studio-muted)] uppercase tracking-wider block">
+                        {locale === 'pt-BR' ? 'Gradiente do Avatar' : 'Avatar Gradient'}
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {AVATAR_GRADIENTS.map((grad, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => handleAvatarColorSelect(grad)}
+                            className={cn(
+                              'h-7 w-7 rounded-full bg-gradient-to-tr border transition duration-300 hover:scale-110 cursor-pointer shadow-sm',
+                              grad,
+                              profile.avatarColor === grad && !profile.avatar
+                                ? 'border-white scale-105 ring-2 ring-[var(--studio-primary)]'
+                                : 'border-[color:var(--studio-border)] hover:border-[var(--studio-muted)]'
+                            )}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -358,28 +405,34 @@ export function UserProfileModal({
                 </div>
 
                 {profile.companies.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-[color:var(--studio-border)] p-5 text-center text-xs text-[var(--studio-muted)]">
+                  <div className="rounded-lg border border-dashed border-[color:var(--studio-border)] p-6 text-center text-xs text-[var(--studio-muted)] bg-[var(--studio-panel)]/20">
+                    <MaterialIcon name="business" className="text-lg text-[var(--studio-subtle)] mb-2 block mx-auto" />
                     {locale === 'pt-BR'
                       ? 'Adicione empresas na aba "Empresas" para configurar seus cargos.'
                       : 'Add companies under the "Companies" tab to configure your roles.'}
                   </div>
                 ) : (
-                  <div className="grid gap-3 max-h-[200px] overflow-y-auto pr-1">
+                  <div className="grid gap-2 max-h-[220px] overflow-y-auto pr-1">
                     {profile.companies.map((company) => (
                       <div
                         key={company}
-                        className="flex items-center gap-3 rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-3"
+                        className="flex items-center gap-4 rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-3 hover:border-[var(--studio-primary-border)]/50 transition duration-200"
                       >
-                        <span className="text-xs font-semibold text-[var(--studio-text)] w-28 truncate">
-                          {company}
-                        </span>
-                        <Input
-                          type="text"
-                          placeholder={locale === 'pt-BR' ? 'Ex: Tech Lead, PO, Dev' : 'e.g. Tech Lead, Dev'}
-                          value={profile.rolesByCompany[company] || ''}
-                          onChange={(e) => handleCompanyRoleChange(company, e.target.value)}
-                          className="border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] h-8 text-xs flex-1"
-                        />
+                        <div className="flex items-center gap-2 w-32 shrink-0">
+                          <MaterialIcon name="business" className="text-sm text-[var(--studio-subtle)]" />
+                          <span className="text-xs font-semibold text-[var(--studio-text)] truncate" title={company}>
+                            {company}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <Input
+                            type="text"
+                            placeholder={locale === 'pt-BR' ? 'Ex: Tech Lead, PO, Designer' : 'e.g. Tech Lead, Designer'}
+                            value={profile.rolesByCompany[company] || ''}
+                            onChange={(e) => handleCompanyRoleChange(company, e.target.value)}
+                            className="border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] h-8 text-xs w-full"
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -389,74 +442,100 @@ export function UserProfileModal({
 
             {/* TAB: COMPANIES */}
             <TabsContent value="companies" className="space-y-4 outline-none focus:outline-none">
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder={locale === 'pt-BR' ? 'Nova Empresa (Ex: Google)' : 'New Company (e.g. Google)'}
-                  value={newCompany}
-                  onChange={(e) => setNewCompany(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddCompany()}
-                  className="border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] h-9 text-xs"
-                />
+              <div className="flex gap-2 bg-[var(--studio-panel)]/30 p-3 rounded-lg border border-[color:var(--studio-border)]">
+                <div className="relative flex-1">
+                  <Input
+                    type="text"
+                    placeholder={locale === 'pt-BR' ? 'Nova Empresa / Workspace (Ex: Google)' : 'New Company / Workspace (e.g. Google)'}
+                    value={newCompany}
+                    onChange={(e) => setNewCompany(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddCompany()}
+                    className="border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] h-10 text-xs pl-8"
+                  />
+                  <MaterialIcon name="add_business" className="absolute left-2.5 top-3 text-xs text-[var(--studio-subtle)]" />
+                </div>
                 <Button
                   onClick={handleAddCompany}
                   size="sm"
-                  className="bg-[var(--studio-primary)] text-zinc-950 hover:opacity-90 h-9 px-3 gap-1"
+                  className="bg-[var(--studio-primary)] text-[#061021] font-semibold hover:opacity-90 h-10 px-4 gap-1.5 shrink-0"
                 >
                   <MaterialIcon name="add" className="text-sm" />
                   {locale === 'pt-BR' ? 'Adicionar' : 'Add'}
                 </Button>
               </div>
 
-              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+              <div className="grid gap-3 sm:grid-cols-2 max-h-[300px] overflow-y-auto pr-1">
                 {profile.companies.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-[color:var(--studio-border)] p-6 text-center text-xs text-[var(--studio-muted)]">
+                  <div className="col-span-2 rounded-lg border border-dashed border-[color:var(--studio-border)] p-8 text-center text-xs text-[var(--studio-muted)] bg-[var(--studio-panel)]/20">
+                    <MaterialIcon name="domain_disabled" className="text-xl text-[var(--studio-subtle)] mb-2 block mx-auto" />
                     {locale === 'pt-BR'
-                      ? 'Nenhuma empresa cadastrada.'
-                      : 'No companies configured.'}
+                      ? 'Nenhum workspace cadastrado.'
+                      : 'No workspaces configured.'}
                   </div>
                 ) : (
                   profile.companies.map((comp) => {
                     const isDefault = profile.defaultCompany === comp
+                    const collabCount = profile.collaborators.filter((c) => c.company === comp).length
+                    const userRole = profile.rolesByCompany[comp] || (locale === 'pt-BR' ? 'Sem Cargo definido' : 'No Role defined')
+
                     return (
                       <div
                         key={comp}
                         className={cn(
-                          'flex items-center justify-between rounded-lg border p-3 transition duration-300',
+                          'flex flex-col justify-between rounded-xl border p-4 transition-all duration-300',
                           isDefault
-                            ? 'border-[var(--studio-primary-border)] bg-[var(--studio-primary-soft)]/20'
-                            : 'border-[color:var(--studio-border)] bg-[var(--studio-panel)]'
+                            ? 'border-[var(--studio-primary-border)] bg-[var(--studio-primary-soft)]/10 shadow-[0_0_12px_rgba(var(--studio-primary-rgb),0.05)]'
+                            : 'border-[color:var(--studio-border)] bg-[var(--studio-panel)] hover:border-[var(--studio-muted)]'
                         )}
                       >
-                        <div className="flex items-center gap-2">
-                          <MaterialIcon
-                            name="business"
-                            className={cn('text-base', isDefault ? 'text-[var(--studio-primary)]' : 'text-[var(--studio-subtle)]')}
-                          />
-                          <span className="text-xs font-semibold text-[var(--studio-text)]">{comp}</span>
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <MaterialIcon
+                              name="business"
+                              className={cn('text-base shrink-0', isDefault ? 'text-[var(--studio-primary)] animate-pulse' : 'text-[var(--studio-subtle)]')}
+                            />
+                            <span className="text-xs font-bold text-[var(--studio-text)] truncate" title={comp}>{comp}</span>
+                          </div>
                           {isDefault && (
-                            <span className="rounded bg-[var(--studio-primary-soft)] border border-[var(--studio-primary-border)] px-1.5 py-0.5 text-[8px] font-bold text-[var(--studio-primary)] uppercase tracking-wider">
+                            <Badge className="bg-[var(--studio-primary-soft)] border-[var(--studio-primary-border)] text-[8px] font-bold text-[var(--studio-primary)] uppercase tracking-wider h-4 px-1">
                               {locale === 'pt-BR' ? 'Padrão' : 'Default'}
-                            </span>
+                            </Badge>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-1.5">
-                          {!isDefault && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
+                        <div className="space-y-1.5 mb-4 text-[10px] text-[var(--studio-muted)]">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <MaterialIcon name="person" className="text-[11px] text-[var(--studio-subtle)]" />
+                            <span>{locale === 'pt-BR' ? `Seu Cargo: ${userRole}` : `Your Role: ${userRole}`}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <MaterialIcon name="groups" className="text-[11px] text-[var(--studio-subtle)]" />
+                            <span>{locale === 'pt-BR' ? `${collabCount} colaboradores` : `${collabCount} collaborators`}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border-t border-[color:var(--studio-border)]/40 pt-2">
+                          {isDefault ? (
+                            <span className="text-[9px] text-[var(--studio-primary)] font-semibold flex items-center gap-1">
+                              <MaterialIcon name="star" className="text-[10px]" filled />
+                              {locale === 'pt-BR' ? 'Workspace Padrão' : 'Default Workspace'}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
                               onClick={() => handleSetDefaultCompany(comp)}
-                              className="h-7 text-[10px] font-semibold text-[var(--studio-subtle)] hover:text-[var(--studio-text)] hover:bg-[var(--studio-panel-strong)]"
+                              className="text-[9px] font-semibold text-[var(--studio-subtle)] hover:text-[var(--studio-text)] hover:underline flex items-center gap-1 cursor-pointer"
                             >
-                              {locale === 'pt-BR' ? 'Definir Padrão' : 'Set Default'}
-                            </Button>
+                              <MaterialIcon name="star_border" className="text-[10px]" />
+                              {locale === 'pt-BR' ? 'Tornar Padrão' : 'Make Default'}
+                            </button>
                           )}
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDeleteCompany(comp)}
                             className="h-7 w-7 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10 cursor-pointer rounded-full"
+                            title={locale === 'pt-BR' ? 'Excluir Empresa' : 'Delete Company'}
                           >
                             <MaterialIcon name="delete" className="text-sm" />
                           </Button>
@@ -471,37 +550,41 @@ export function UserProfileModal({
             {/* TAB: COLLABORATORS */}
             <TabsContent value="collaborators" className="space-y-4 outline-none focus:outline-none">
               {/* Add form */}
-              <div className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-4 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--studio-secondary)]">
-                  {locale === 'pt-BR' ? 'Novo Colaborador Frequente' : 'New Frequent Collaborator'}
-                </h4>
+              <div className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-panel)]/40 p-4 space-y-4 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <MaterialIcon name="person_add" className="text-base text-[var(--studio-secondary)]" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--studio-secondary)]">
+                    {locale === 'pt-BR' ? 'Novo Colaborador Frequente' : 'New Frequent Collaborator'}
+                  </h4>
+                </div>
+                
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1">
-                    <Label htmlFor="collab-name" className="text-[10px] text-[var(--studio-muted)]">Nome</Label>
+                    <Label htmlFor="collab-name" className="text-[10px] text-[var(--studio-muted)] font-semibold">Nome</Label>
                     <Input
                       id="collab-name"
                       type="text"
-                      placeholder="Ex: Carlos Dev"
+                      placeholder="Ex: Ana Silva"
                       value={newCollabName}
                       onChange={(e) => setNewCollabName(e.target.value)}
-                      className="border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] h-8 text-xs"
+                      className="border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] h-9 text-xs"
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="collab-role" className="text-[10px] text-[var(--studio-muted)]">Cargo</Label>
+                    <Label htmlFor="collab-role" className="text-[10px] text-[var(--studio-muted)] font-semibold">Cargo</Label>
                     <Input
                       id="collab-role"
                       type="text"
-                      placeholder="Ex: Senior Developer"
+                      placeholder="Ex: PO, Senior Developer"
                       value={newCollabRole}
                       onChange={(e) => setNewCollabRole(e.target.value)}
-                      className="border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] h-8 text-xs"
+                      className="border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] h-9 text-xs"
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[10px] text-[var(--studio-muted)]">Empresa</Label>
+                    <Label className="text-[10px] text-[var(--studio-muted)] font-semibold">Empresa</Label>
                     <select
-                      className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] px-2.5 h-8 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer"
+                      className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] px-2.5 h-9 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer"
                       value={newCollabCompany}
                       onChange={(e) => setNewCollabCompany(e.target.value)}
                     >
@@ -512,73 +595,199 @@ export function UserProfileModal({
                     </select>
                   </div>
                 </div>
-                <div className="flex justify-end pt-1">
+                <div className="flex justify-end pt-1 border-t border-[color:var(--studio-border)]/40">
                   <Button
                     onClick={handleAddCollaborator}
                     disabled={!newCollabName.trim()}
                     size="sm"
-                    className="bg-[var(--studio-secondary)] text-zinc-950 font-semibold hover:opacity-90 h-8 gap-1"
+                    className="bg-[var(--studio-secondary)] text-[#061021] font-semibold hover:opacity-90 h-8 px-3 gap-1.5"
                   >
-                    <MaterialIcon name="person_add" className="text-sm" />
+                    <MaterialIcon name="save" className="text-sm" />
                     {locale === 'pt-BR' ? 'Salvar Colaborador' : 'Save Collaborator'}
                   </Button>
                 </div>
               </div>
 
-              {/* Collab list */}
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+              {/* Collab list grouped by company */}
+              <div className="space-y-4 max-h-[220px] overflow-y-auto pr-1">
                 {profile.collaborators.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-[color:var(--studio-border)] p-6 text-center text-xs text-[var(--studio-muted)]">
+                  <div className="rounded-lg border border-dashed border-[color:var(--studio-border)] p-6 text-center text-xs text-[var(--studio-muted)] bg-[var(--studio-panel)]/20">
+                    <MaterialIcon name="group_add" className="text-xl text-[var(--studio-subtle)] mb-2 block mx-auto" />
                     {locale === 'pt-BR'
                       ? 'Nenhum colaborador frequente cadastrado.'
                       : 'No frequent collaborators configured.'}
                   </div>
                 ) : (
-                  profile.collaborators.map((collab) => (
-                    <div
-                      key={collab.id}
-                      className="flex items-center justify-between rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-3 hover:border-[var(--studio-secondary-border)] transition duration-200"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--studio-secondary-soft)] text-[var(--studio-secondary)] shrink-0 font-bold text-xs uppercase">
-                          {collab.name.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-[var(--studio-text)] truncate">{collab.name}</p>
-                          <p className="text-[10px] text-[var(--studio-muted)] truncate">
-                            {collab.role || (locale === 'pt-BR' ? 'Sem Cargo' : 'No Role')}
-                          </p>
-                        </div>
-                      </div>
+                  (() => {
+                    // Group collaborators
+                    const grouped: Record<string, Collaborator[]> = {}
+                    profile.companies.forEach((c) => { grouped[c] = [] })
+                    grouped['outros'] = []
 
-                      <div className="flex items-center gap-3">
-                        <span className="rounded bg-[var(--studio-panel-strong)] px-2 py-0.5 text-[9px] font-medium text-[var(--studio-subtle)] border border-[color:var(--studio-border)]">
-                          {collab.company === 'outros' ? (locale === 'pt-BR' ? 'Outros' : 'Others') : collab.company}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteCollaborator(collab.id)}
-                          className="h-7 w-7 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10 cursor-pointer rounded-full"
-                        >
-                          <MaterialIcon name="delete" className="text-sm" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))
+                    profile.collaborators.forEach((c) => {
+                      const compKey = c.company || 'outros'
+                      if (!grouped[compKey]) {
+                        grouped[compKey] = []
+                      }
+                      grouped[compKey].push(c)
+                    })
+
+                    return Object.entries(grouped)
+                      .filter(([_, collabs]) => collabs.length > 0)
+                      .map(([comp, collabs]) => (
+                        <div key={comp} className="space-y-2">
+                          <div className="flex items-center gap-2 border-b border-[color:var(--studio-border)]/40 pb-1 shrink-0">
+                            <MaterialIcon name="business" className="text-[11px] text-[var(--studio-secondary)]" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--studio-text)]">
+                              {comp === 'outros' ? (locale === 'pt-BR' ? 'Outros (Sem Empresa)' : 'Others (No Company)') : comp}
+                            </span>
+                            <Badge className="h-4 text-[9px] px-1 bg-[var(--studio-panel-strong)] border-[color:var(--studio-border)] text-[var(--studio-muted)]">
+                              {collabs.length}
+                            </Badge>
+                          </div>
+
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {collabs.map((collab) => {
+                              const isEditing = editingCollabId === collab.id
+
+                              return (
+                                <div
+                                  key={collab.id}
+                                  className={cn(
+                                    "flex items-center justify-between rounded-lg border p-2.5 transition duration-200",
+                                    isEditing
+                                      ? "border-[var(--studio-secondary-border)] bg-[var(--studio-panel-strong)]/30 w-full"
+                                      : "border-[color:var(--studio-border)] bg-[var(--studio-panel)] hover:border-[var(--studio-secondary-border)]/50"
+                                  )}
+                                >
+                                  {isEditing ? (
+                                    <div className="flex flex-col gap-2 w-full">
+                                      <div className="flex gap-2">
+                                        <div className="flex-1 space-y-1">
+                                          <Label className="text-[9px] text-[var(--studio-muted)] font-semibold">
+                                            {locale === 'pt-BR' ? 'Nome' : 'Name'}
+                                          </Label>
+                                          <Input
+                                            type="text"
+                                            placeholder={locale === 'pt-BR' ? 'Ex: Ana Silva' : 'e.g. Ana Silva'}
+                                            value={editingCollabName}
+                                            onChange={(e) => setEditingCollabName(e.target.value)}
+                                            className="h-8 text-xs border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] w-full font-medium"
+                                          />
+                                        </div>
+                                        <div className="flex-1 space-y-1">
+                                          <Label className="text-[9px] text-[var(--studio-muted)] font-semibold">
+                                            {locale === 'pt-BR' ? 'Cargo' : 'Role'}
+                                          </Label>
+                                          <Input
+                                            type="text"
+                                            placeholder={locale === 'pt-BR' ? 'Ex: PO' : 'e.g. PO'}
+                                            value={editingCollabRole}
+                                            onChange={(e) => setEditingCollabRole(e.target.value)}
+                                            className="h-8 text-xs border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] w-full font-medium"
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="flex-1 space-y-1">
+                                          <Label className="text-[9px] text-[var(--studio-muted)] font-semibold">
+                                            {locale === 'pt-BR' ? 'Empresa' : 'Company'}
+                                          </Label>
+                                          <select
+                                            className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] px-2 h-8 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer font-medium"
+                                            value={editingCollabCompany}
+                                            onChange={(e) => setEditingCollabCompany(e.target.value)}
+                                          >
+                                            {profile.companies.map((c) => (
+                                              <option key={c} value={c}>{c}</option>
+                                            ))}
+                                            <option value="outros">
+                                              {locale === 'pt-BR' ? 'Outros (Sem Empresa)' : 'Others (No Company)'}
+                                            </option>
+                                          </select>
+                                        </div>
+                                        <div className="flex items-end gap-1 h-full pt-4">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={handleSaveCollaboratorEdit}
+                                            disabled={!editingCollabName.trim()}
+                                            className="h-8 w-8 p-0 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-full cursor-pointer"
+                                            title={locale === 'pt-BR' ? 'Salvar' : 'Save'}
+                                          >
+                                            <MaterialIcon name="check" className="text-sm" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setEditingCollabId(null)}
+                                            className="h-8 w-8 p-0 text-[var(--studio-muted)] hover:text-[var(--studio-text)] hover:bg-[var(--studio-panel-strong)] rounded-full cursor-pointer"
+                                            title={locale === 'pt-BR' ? 'Cancelar' : 'Cancel'}
+                                          >
+                                            <MaterialIcon name="close" className="text-sm" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--studio-secondary-soft)] text-[var(--studio-secondary)] shrink-0 font-bold text-[10px] uppercase">
+                                          {collab.name.substring(0, 2).toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-semibold text-[var(--studio-text)] truncate">{collab.name}</p>
+                                          <p className="text-[9px] text-[var(--studio-muted)] truncate">
+                                            {collab.role || (locale === 'pt-BR' ? 'Sem Cargo' : 'No Role')}
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleStartEditCollab(collab)}
+                                          className="h-6 w-6 p-0 text-[var(--studio-subtle)] hover:text-[var(--studio-text)] hover:bg-[var(--studio-panel-strong)] cursor-pointer rounded-full"
+                                          title={locale === 'pt-BR' ? 'Editar Colaborador' : 'Edit Collaborator'}
+                                        >
+                                          <MaterialIcon name="edit" className="text-xs" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleDeleteCollaborator(collab.id)}
+                                          className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10 cursor-pointer rounded-full shrink-0"
+                                          title={locale === 'pt-BR' ? 'Excluir Colaborador' : 'Delete Collaborator'}
+                                        >
+                                          <MaterialIcon name="delete" className="text-xs" />
+                                        </Button>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ))
+                  })()
                 )}
               </div>
             </TabsContent>
 
             {/* TAB: PREFERENCES */}
-            <TabsContent value="preferences" className="space-y-4 outline-none focus:outline-none">
+            <TabsContent value="preferences" className="space-y-6 outline-none focus:outline-none">
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-[var(--studio-muted)]">
-                    {locale === 'pt-BR' ? 'Empresa Padrão' : 'Default Company'}
-                  </Label>
+                <div className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <MaterialIcon name="business" className="text-sm text-[var(--studio-primary)]" />
+                    <Label className="text-xs font-bold text-[var(--studio-text)] uppercase tracking-wider">
+                      {locale === 'pt-BR' ? 'Workspace Padrão' : 'Default Workspace'}
+                    </Label>
+                  </div>
                   <select
-                    className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] px-3 h-9 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer"
+                    className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] px-3 h-10 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer"
                     value={profile.defaultCompany || ''}
                     onChange={(e) => handleSave({ ...profile, defaultCompany: e.target.value })}
                   >
@@ -587,19 +796,22 @@ export function UserProfileModal({
                     ))}
                     <option value="">{locale === 'pt-BR' ? 'Nenhuma (Selecionar Manual)' : 'None (Manual Selection)'}</option>
                   </select>
-                  <p className="text-[10px] text-[var(--studio-subtle)]">
+                  <p className="text-[10px] text-[var(--studio-muted)] leading-relaxed">
                     {locale === 'pt-BR'
                       ? 'Workspace padrão pré-selecionado na tela de gravação.'
                       : 'Default workspace selected in the recording panel.'}
                   </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-[var(--studio-muted)]">
-                    {locale === 'pt-BR' ? 'Template Padrão da Reunião' : 'Default Meeting Template'}
-                  </Label>
+                <div className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <MaterialIcon name="description" className="text-sm text-[var(--studio-primary)]" />
+                    <Label className="text-xs font-bold text-[var(--studio-text)] uppercase tracking-wider">
+                      {locale === 'pt-BR' ? 'Template de Reunião' : 'Meeting Template'}
+                    </Label>
+                  </div>
                   <select
-                    className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] px-3 h-9 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer"
+                    className="w-full text-xs rounded-md border border-[color:var(--studio-border)] bg-[var(--studio-card)] text-[var(--studio-text)] px-3 h-10 focus:outline-none focus:border-[var(--studio-primary)] cursor-pointer"
                     value={profile.defaultTemplate || 'default'}
                     onChange={(e) => handleSave({ ...profile, defaultTemplate: e.target.value as 'default' | 'daily' | 'oneOnOne' })}
                   >
@@ -607,7 +819,7 @@ export function UserProfileModal({
                     <option value="daily">{locale === 'pt-BR' ? 'Daily Scrum (Acompanhamento)' : 'Daily Scrum (Status Tracker)'}</option>
                     <option value="oneOnOne">{locale === 'pt-BR' ? '1:1 Feedback (Individual)' : '1:1 Feedback (Individual)'}</option>
                   </select>
-                  <p className="text-[10px] text-[var(--studio-subtle)]">
+                  <p className="text-[10px] text-[var(--studio-muted)] leading-relaxed">
                     {locale === 'pt-BR'
                       ? 'Modelo de relatório padrão pré-selecionado para processar áudios.'
                       : 'Default report template pre-selected to process audio.'}
@@ -615,21 +827,30 @@ export function UserProfileModal({
                 </div>
               </div>
 
-              <div className="rounded-lg border border-[color:var(--studio-border)] bg-[var(--studio-panel)] p-4">
+              {/* Sync explanation box */}
+              <div className="rounded-xl border border-[color:var(--studio-border)] bg-[var(--studio-panel)]/30 p-4 space-y-3">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-lg bg-[var(--studio-primary-soft)] p-2 text-[var(--studio-primary)]">
+                  <div className="rounded-lg bg-[var(--studio-primary-soft)] p-2 text-[var(--studio-primary)] shrink-0">
                     <MaterialIcon name="psychology" className="text-base" />
                   </div>
                   <div>
-                    <h5 className="text-xs font-semibold text-[var(--studio-text)]">
+                    <h5 className="text-xs font-bold text-[var(--studio-text)] uppercase tracking-wider">
                       {locale === 'pt-BR' ? 'Sincronização com IA Inteligente' : 'Smart AI Sync'}
                     </h5>
-                    <p className="mt-1 text-[11px] text-[var(--studio-muted)] leading-relaxed">
+                    <p className="mt-1.5 text-[11px] text-[var(--studio-muted)] leading-relaxed">
                       {locale === 'pt-BR'
-                        ? 'Todas as informações cadastradas neste painel (seu cargo e os colaboradores do respectivo projeto) são enviadas reativamente no payload de processamento do áudio. Isso possibilita que os algoritmos de transcrição façam a correlação exata de cargos e nomes, minimizando oradores genéricos.'
+                        ? 'Todas as informações cadastradas neste painel (seu cargo e os colaboradores do respectivo projeto) são enviadas no payload de processamento do áudio. Isso possibilita que os algoritmos de transcrição façam a correlação exata de cargos e nomes, minimizando oradores genéricos.'
                         : 'All info configured here (your role and collaborators of the active workspace) is automatically synced in the audio processing payload, enabling accurate name/role correlation.'}
                     </p>
                   </div>
+                </div>
+                <div className="border-t border-[color:var(--studio-border)]/40 pt-2 flex items-center justify-between text-[10px] text-[var(--studio-muted)]">
+                  <span>{locale === 'pt-BR' ? 'Status do Time:' : 'Team Status:'}</span>
+                  <span className="font-semibold text-[var(--studio-primary)]">
+                    {locale === 'pt-BR'
+                      ? `${profile.companies.length} workspaces e ${profile.collaborators.length} colaboradores integrados`
+                      : `${profile.companies.length} workspaces and ${profile.collaborators.length} collaborators integrated`}
+                  </span>
                 </div>
               </div>
             </TabsContent>
@@ -640,7 +861,7 @@ export function UserProfileModal({
           <Button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="bg-[var(--studio-primary)] text-zinc-950 font-semibold hover:opacity-90 cursor-pointer h-9 px-4 text-xs"
+            className="bg-[var(--studio-primary)] text-[#061021] font-semibold hover:opacity-90 cursor-pointer h-9 px-4 text-xs"
           >
             {locale === 'pt-BR' ? 'Concluir' : 'Done'}
           </Button>

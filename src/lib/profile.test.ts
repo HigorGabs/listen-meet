@@ -20,7 +20,7 @@ describe('profile utilities', () => {
 
   it('saves and retrieves user profile correctly', () => {
     const customProfile: UserProfile = {
-      name: 'Higor Gabs',
+      name: 'Higor Dev',
       avatar: 'data:image/jpeg;base64,123',
       avatarColor: 'from-pink-500 to-rose-600',
       rolesByCompany: {
@@ -44,7 +44,7 @@ describe('profile utilities', () => {
     expect(saved).toBe(true)
 
     const loaded = getProfile()
-    expect(loaded.name).toBe('Higor Gabs')
+    expect(loaded.name).toBe('Higor Dev')
     expect(loaded.avatar).toBe('data:image/jpeg;base64,123')
     expect(loaded.rolesByCompany.Google).toBe('PO')
     expect(loaded.companies).toContain('Google')

@@ -287,7 +287,7 @@ export function SessionReadinessPanel({
           </p>
           <Input
             type="text"
-            placeholder={locale === 'pt-BR' ? 'Ex: Higor Gabs, Ana PO, Carlos Dev' : 'E.g. Higor Gabs, Ana PO'}
+            placeholder={locale === 'pt-BR' ? 'Ex: Higor, Ana PO, Carlos Dev' : 'E.g. Higor, Ana PO'}
             className="border-[color:var(--studio-border)] bg-[var(--studio-panel)] text-[var(--studio-text)] placeholder:text-[var(--studio-subtle)] text-xs h-9"
             value={participantInput}
             onChange={(e) => setParticipantInput(e.target.value)}
