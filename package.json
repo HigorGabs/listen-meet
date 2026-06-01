@@ -6,7 +6,7 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "dev": "next dev -p 4001 --turbopack",
+    "dev": "NODE_OPTIONS='--max-old-space-size=1024' next dev -p 4001 --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
