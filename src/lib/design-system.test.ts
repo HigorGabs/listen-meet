@@ -29,16 +29,16 @@ function listFiles(directory: string): string[] {
 }
 
 describe('Google visual system', () => {
-  it('uses Roboto as the app font and loads Google Material Symbols', () => {
+  it('uses Outfit as the app font and loads Google Material Symbols', () => {
     const layoutSource = readProjectFile('src/app/layout.tsx')
     const globalCssSource = readProjectFile('src/app/globals.css')
 
-    expect(layoutSource).toContain('Roboto')
-    expect(layoutSource).toContain('--font-roboto')
+    expect(layoutSource).toContain('Outfit')
+    expect(layoutSource).toContain('--font-outfit')
     expect(layoutSource).toContain('fonts.googleapis.com/css2?family=Material+Symbols+Rounded')
     expect(layoutSource).toContain('display=block')
     expect(layoutSource).not.toContain('Geist')
-    expect(globalCssSource).toContain('--font-sans: var(--font-roboto)')
+    expect(globalCssSource).toContain('--font-sans: var(--font-outfit)')
     expect(globalCssSource).toContain('.material-symbols-rounded')
   })
 

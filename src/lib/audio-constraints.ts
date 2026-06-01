@@ -152,7 +152,7 @@ export function isAllowedAudioType(file: Pick<AudioFileMeta, 'name' | 'type'>): 
   return hasAllowedMime && (hasAllowedExtension || mimeType.startsWith('audio/'))
 }
 
-export function validateAudioFile(file: AudioFileMeta): AudioValidationResult {
+export function validateAudioFile(file: AudioFileMeta, maxUploadMb?: number): AudioValidationResult {
   if (file.size <= 0) {
     return {
       valid: false,
@@ -161,11 +161,14 @@ export function validateAudioFile(file: AudioFileMeta): AudioValidationResult {
     }
   }
 
-  if (file.size > MAX_AUDIO_UPLOAD_BYTES) {
+  const limitMb = maxUploadMb ?? MAX_AUDIO_UPLOAD_MB
+  const limitBytes = limitMb * 1024 * 1024
+
+  if (file.size > limitBytes) {
     return {
       valid: false,
       status: 413,
-      message: `Arquivo muito grande. O limite atual é ${MAX_AUDIO_UPLOAD_MB}MB.`,
+      message: `Arquivo muito grande. O limite atual é ${limitMb}MB.`,
     }
   }
 

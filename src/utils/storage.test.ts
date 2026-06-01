@@ -27,17 +27,21 @@ describe('MeetingStorage', () => {
     vi.restoreAllMocks()
   })
 
-  it('returns true when the meeting is saved locally', () => {
-    expect(MeetingStorage.saveMeeting(meeting)).toBe(true)
-    expect(MeetingStorage.getAllMeetings()).toHaveLength(1)
+  it('returns true when the meeting is saved locally', async () => {
+    const saved = await MeetingStorage.saveMeeting(meeting)
+    expect(saved).toBe(true)
+    
+    const list = await MeetingStorage.getAllMeetings()
+    expect(list).toHaveLength(1)
   })
 
-  it('returns false when local storage rejects the write', () => {
+  it('returns false when local storage rejects the write', async () => {
     vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
       throw new Error('quota exceeded')
     })
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
-    expect(MeetingStorage.saveMeeting(meeting)).toBe(false)
+    const saved = await MeetingStorage.saveMeeting(meeting)
+    expect(saved).toBe(false)
   })
 })

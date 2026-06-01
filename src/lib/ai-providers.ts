@@ -9,6 +9,7 @@ export interface AiProvider {
   serverEnvVar: string
   supportsAudioProcessing: boolean
   requiresApiKeyForModels: boolean
+  maxUploadMb: number
 }
 
 export interface AiModelOption {
@@ -21,6 +22,7 @@ export interface AiModelOption {
   outputModalities?: string[]
   created?: number | string
   recommended?: boolean
+  category?: 'audio' | 'text' | 'image' | 'other'
 }
 
 export interface AiRuntimeConfig {
@@ -37,6 +39,7 @@ export const AI_PROVIDERS: AiProvider[] = [
     serverEnvVar: 'GEMINI_API_KEY',
     supportsAudioProcessing: true,
     requiresApiKeyForModels: true,
+    maxUploadMb: 25,
   },
   {
     id: 'openrouter',
@@ -45,6 +48,7 @@ export const AI_PROVIDERS: AiProvider[] = [
     serverEnvVar: 'OPENROUTER_API_KEY',
     supportsAudioProcessing: true,
     requiresApiKeyForModels: false,
+    maxUploadMb: 15,
   },
   {
     id: 'openai',
@@ -53,6 +57,7 @@ export const AI_PROVIDERS: AiProvider[] = [
     serverEnvVar: 'OPENAI_API_KEY',
     supportsAudioProcessing: false,
     requiresApiKeyForModels: true,
+    maxUploadMb: 10,
   },
   {
     id: 'anthropic',
@@ -61,6 +66,7 @@ export const AI_PROVIDERS: AiProvider[] = [
     serverEnvVar: 'ANTHROPIC_API_KEY',
     supportsAudioProcessing: false,
     requiresApiKeyForModels: true,
+    maxUploadMb: 10,
   },
 ]
 

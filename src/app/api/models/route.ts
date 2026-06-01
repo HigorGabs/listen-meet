@@ -57,15 +57,29 @@ async function listGeminiModels(apiKey: string): Promise<AiModelOption[]> {
     )
     .map((model: { name: string; displayName?: string; description?: string; inputTokenLimit?: number }) => {
       const id = model.name.replace(/^models\//, '')
+      const lowerId = id.toLowerCase()
+      let category: 'audio' | 'text' | 'image' | 'other' = 'text'
+      if (lowerId.includes('embedding') || lowerId.includes('classifier') || lowerId.includes('aqa')) {
+        category = 'other'
+      } else if (lowerId.includes('imagen') || lowerId.includes('image')) {
+        category = 'image'
+      } else if (
+        (lowerId.includes('1.5') || lowerId.includes('2.0') || lowerId.includes('2.5') || lowerId.includes('flash') || lowerId.includes('pro')) &&
+        !(lowerId.includes('1.0') || lowerId.includes('vision') || lowerId.includes('text'))
+      ) {
+        category = 'audio'
+      }
+
       return {
         id,
         name: model.displayName || id,
         provider: 'gemini' as const,
         description: model.description,
         contextLength: model.inputTokenLimit,
-        inputModalities: ['audio', 'text'],
+        inputModalities: category === 'audio' ? ['audio', 'text'] : ['text'],
         outputModalities: ['text'],
         recommended: GEMINI_RECOMMENDED_MODELS.includes(id),
+        category,
       }
     })
     .sort((a: AiModelOption, b: AiModelOption) => {
@@ -97,9 +111,8 @@ async function listOpenRouterModels(apiKey: string): Promise<AiModelOption[]> {
 
   return (data.data || [])
     .filter((model: { architecture?: { input_modalities?: string[]; output_modalities?: string[] } }) => {
-      const input = model.architecture?.input_modalities || []
       const output = model.architecture?.output_modalities || []
-      return input.includes('audio') && output.includes('text')
+      return output.includes('text')
     })
     .map((model: {
       id: string
@@ -108,16 +121,31 @@ async function listOpenRouterModels(apiKey: string): Promise<AiModelOption[]> {
       context_length?: number
       created?: number
       architecture?: { input_modalities?: string[]; output_modalities?: string[] }
-    }) => ({
-      id: model.id,
-      name: model.name || model.id,
-      provider: 'openrouter' as const,
-      description: model.description,
-      contextLength: model.context_length,
-      created: model.created,
-      inputModalities: model.architecture?.input_modalities,
-      outputModalities: model.architecture?.output_modalities,
-    }))
+    }) => {
+      const input = model.architecture?.input_modalities || []
+      const id = model.id.toLowerCase()
+      let category: 'audio' | 'text' | 'image' | 'other' = 'text'
+      
+      if (id.includes('embed') || id.includes('moderation')) {
+        category = 'other'
+      } else if (input.includes('audio')) {
+        category = 'audio'
+      } else if (input.includes('image')) {
+        category = 'image'
+      }
+
+      return {
+        id: model.id,
+        name: model.name || model.id,
+        provider: 'openrouter' as const,
+        description: model.description,
+        contextLength: model.context_length,
+        created: model.created,
+        inputModalities: model.architecture?.input_modalities,
+        outputModalities: model.architecture?.output_modalities,
+        category,
+      }
+    })
 }
 
 async function listOpenAiModels(apiKey: string): Promise<AiModelOption[]> {
@@ -137,13 +165,34 @@ async function listOpenAiModels(apiKey: string): Promise<AiModelOption[]> {
   const data = await response.json()
 
   return (data.data || [])
-    .map((model: { id: string; created?: number; owned_by?: string }) => ({
-      id: model.id,
-      name: model.id,
-      provider: 'openai' as const,
-      description: model.owned_by ? `Owner: ${model.owned_by}` : undefined,
-      created: model.created,
-    }))
+    .map((model: { id: string; created?: number; owned_by?: string }) => {
+      const id = model.id.toLowerCase()
+      let category: 'audio' | 'text' | 'image' | 'other' = 'text'
+      
+      if (
+        id.includes('embedding') ||
+        id.includes('moderation') ||
+        id.includes('babbage') ||
+        id.includes('davinci') ||
+        id.includes('curie') ||
+        id.includes('ada')
+      ) {
+        category = 'other'
+      } else if (id.includes('dall-e') || id.includes('image')) {
+        category = 'image'
+      } else if (id.includes('whisper') || id.includes('tts') || id.includes('audio')) {
+        category = 'audio'
+      }
+      
+      return {
+        id: model.id,
+        name: model.id,
+        provider: 'openai' as const,
+        description: model.owned_by ? `Owner: ${model.owned_by}` : undefined,
+        created: model.created,
+        category,
+      }
+    })
     .sort((a: AiModelOption, b: AiModelOption) => a.id.localeCompare(b.id))
 }
 
@@ -164,12 +213,26 @@ async function listAnthropicModels(apiKey: string): Promise<AiModelOption[]> {
 
   const data = await response.json()
 
-  return (data.data || []).map((model: { id: string; display_name?: string; created_at?: string }) => ({
-    id: model.id,
-    name: model.display_name || model.id,
-    provider: 'anthropic' as const,
-    created: model.created_at,
-  }))
+  return (data.data || [])
+    .filter((model: { id: string }) => {
+      const id = model.id.toLowerCase()
+      return id.includes('claude')
+    })
+    .map((model: { id: string; display_name?: string; created_at?: string }) => {
+      const id = model.id.toLowerCase()
+      let category: 'audio' | 'text' | 'image' | 'other' = 'text'
+      if (id.includes('claude-3') || id.includes('claude-3-5')) {
+        category = 'image'
+      }
+      
+      return {
+        id: model.id,
+        name: model.display_name || model.id,
+        provider: 'anthropic' as const,
+        created: model.created_at,
+        category,
+      }
+    })
 }
 
 async function listModels(provider: AiProviderId, apiKey: string): Promise<AiModelOption[]> {

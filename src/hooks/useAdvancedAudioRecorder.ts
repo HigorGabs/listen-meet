@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { getAudioFilenameForBlob, validateAudioFile } from '@/lib/audio-constraints'
+import { getAudioFilenameForBlob, validateAudioFile, MAX_AUDIO_UPLOAD_MB } from '@/lib/audio-constraints'
 
 export interface AudioDevice {
   deviceId: string
@@ -42,12 +42,13 @@ export interface UseAdvancedAudioRecorderReturn {
   stopMonitoring: () => void
   
   // File upload
-  handleFileUpload: (file: File) => Promise<void>
+  handleFileUpload: (file: File, maxUploadMb?: number) => Promise<void>
   
   // Results
   recordingData: RecordingData | null
   error: string | null
   clearError: () => void
+  isCompressing?: boolean
 }
 
 export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
@@ -56,6 +57,7 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
   const [duration, setDuration] = useState(0)
   const [recordingData, setRecordingData] = useState<RecordingData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isCompressing, setIsCompressing] = useState(false)
   
   const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([])
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('default')
@@ -303,7 +305,10 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
         }
       }
 
-      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: mimeType || undefined,
+        audioBitsPerSecond: 24000,
+      })
       mediaRecorderRef.current = mediaRecorder
 
       mediaRecorder.ondataavailable = (event) => {
@@ -392,19 +397,40 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
     }
   }, [isRecording, isPaused, updateDuration])
 
-  const handleFileUpload = useCallback(async (file: File) => {
+  const handleFileUpload = useCallback(async (file: File, maxUploadMb?: number) => {
     try {
       setError(null)
       setRecordingData(null)
+      
+      const limitMb = maxUploadMb ?? MAX_AUDIO_UPLOAD_MB
+      const limitBytes = limitMb * 1024 * 1024
+      
+      let finalFile = file
+      
+      if (file.size > 10 * 1024 * 1024 || file.size > limitBytes) {
+        setIsCompressing(true)
+        try {
+          finalFile = await compressAudioFile(file)
+        } catch (compressErr) {
+          console.warn('Falha na compactação automática do áudio:', compressErr)
+        } finally {
+          setIsCompressing(false)
+        }
+      }
 
-      const validation = validateAudioFile(file)
+      const validation = validateAudioFile({
+        name: finalFile.name,
+        type: finalFile.type,
+        size: finalFile.size
+      }, maxUploadMb)
+
       if (!validation.valid) {
         setError(validation.message || 'Arquivo de áudio inválido.')
         return
       }
 
       // Get duration using audio element
-      const audioUrl = URL.createObjectURL(file)
+      const audioUrl = URL.createObjectURL(finalFile)
       const audio = new Audio(audioUrl)
       
       const duration = await new Promise<number>((resolve, reject) => {
@@ -419,10 +445,10 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
       })
 
       setRecordingData({
-        blob: file,
+        blob: finalFile,
         duration,
-        size: file.size,
-        filename: file.name,
+        size: finalFile.size,
+        filename: finalFile.name,
         source: 'upload'
       })
 
@@ -452,5 +478,99 @@ export function useAdvancedAudioRecorder(): UseAdvancedAudioRecorderReturn {
     recordingData,
     error,
     clearError,
+    isCompressing,
+  }
+}
+
+// Client-side pure JS audio compression and downsampling helpers
+async function compressAudioFile(file: File): Promise<File> {
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext || (globalThis as any).AudioContext
+  if (!AudioContextClass) {
+    throw new Error('Web Audio API not supported in this browser.')
+  }
+  const audioCtx = new AudioContextClass()
+  const arrayBuffer = await file.arrayBuffer()
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+  
+  // Downsample to 16kHz mono (or 8kHz for longer meetings)
+  const targetSampleRate = audioBuffer.duration > 2700 ? 8000 : 16000
+  const numberOfChannels = 1
+  
+  const OfflineAudioContextClass = window.OfflineAudioContext || (window as any).webkitOfflineAudioContext || (globalThis as any).OfflineAudioContext
+  if (!OfflineAudioContextClass) {
+    throw new Error('OfflineAudioContext not supported in this browser.')
+  }
+  const offlineCtx = new OfflineAudioContextClass(
+    numberOfChannels,
+    Math.floor(audioBuffer.duration * targetSampleRate),
+    targetSampleRate
+  )
+  
+  const bufferSource = offlineCtx.createBufferSource()
+  bufferSource.buffer = audioBuffer
+  bufferSource.connect(offlineCtx.destination)
+  bufferSource.start()
+  
+  const renderedBuffer = await offlineCtx.startRendering()
+  const wavBlob = bufferToWav(renderedBuffer)
+  
+  const originalNameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || file.name
+  return new File([wavBlob], `${originalNameWithoutExt}_compacted.wav`, {
+    type: 'audio/wav',
+    lastModified: Date.now()
+  })
+}
+
+function bufferToWav(buffer: AudioBuffer): Blob {
+  const numOfChan = buffer.numberOfChannels
+  const sampleRate = buffer.sampleRate
+  const format = 1 // PCM
+  const bitDepth = 16
+  
+  let result
+  if (numOfChan === 1) {
+    result = buffer.getChannelData(0)
+  } else {
+    const ch1 = buffer.getChannelData(0)
+    const ch2 = buffer.getChannelData(1)
+    result = new Float32Array(ch1.length)
+    for (let i = 0; i < ch1.length; i++) {
+      result[i] = (ch1[i] + ch2[i]) / 2
+    }
+  }
+  
+  const bufferLength = result.length * 2
+  const wavBuffer = new ArrayBuffer(44 + bufferLength)
+  const view = new DataView(wavBuffer)
+  
+  writeString(view, 0, 'RIFF')
+  view.setUint32(4, 36 + bufferLength, true)
+  writeString(view, 8, 'WAVE')
+  writeString(view, 12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, format, true)
+  view.setUint16(22, numOfChan, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * numOfChan * (bitDepth / 8), true)
+  view.setUint16(32, numOfChan * (bitDepth / 8), true)
+  view.setUint16(34, bitDepth, true)
+  writeString(view, 36, 'data')
+  view.setUint32(40, bufferLength, true)
+  
+  floatTo16BitPCM(view, 44, result)
+  
+  return new Blob([wavBuffer], { type: 'audio/wav' })
+}
+
+function floatTo16BitPCM(output: DataView, offset: number, input: Float32Array) {
+  for (let i = 0; i < input.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, input[i]))
+    output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+  }
+}
+
+function writeString(view: DataView, offset: number, string: string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i))
   }
 }

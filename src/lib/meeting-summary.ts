@@ -21,6 +21,16 @@ const participationItemSchema = z.object({
   role: z.string().trim().min(1),
 })
 
+const topicBreakdownItemSchema = z.object({
+  topic: z.string().trim().min(1),
+  percentage: z.coerce.number().int().nonnegative(),
+})
+
+const sentimentTimelineItemSchema = z.object({
+  phase: z.string().trim().min(1),
+  sentiment: z.string().trim().min(1),
+})
+
 export const meetingSummarySchema = z.object({
   title: z.string().trim().min(1),
   overview: z.string().trim().min(1),
@@ -53,6 +63,80 @@ export const meetingSummarySchema = z.object({
     .optional(),
   participationAnalysis: z.array(participationItemSchema).default([]).optional(),
   transcript: z.string().optional(),
+  meetingQualityScore: z.coerce.number().int().min(0).max(100).default(75).optional(),
+  topicBreakdown: z.array(topicBreakdownItemSchema).default([]).optional(),
+  sentimentTimeline: z.array(sentimentTimelineItemSchema).default([]).optional(),
+  decisions: stringArraySchema.optional(),
+
+  // Super Report 21 Categories extension
+  summaryOneLine: z.string().trim().optional(),
+  agendaAlignment: z.object({
+    achieved: stringArraySchema,
+    pending: stringArraySchema,
+  }).optional(),
+  criticalDecisions: z.array(z.object({
+    decision: z.string().trim(),
+    rationale: z.string().trim(),
+  })).default([]).optional(),
+  actionPlan: z.array(z.object({
+    task: z.string().trim(),
+    assignee: z.string().trim().default('N/A'),
+    deadline: z.string().trim().default('N/A'),
+    priority: z.string().trim().default('N/A'),
+  })).default([]).optional(),
+  risksAndBlockers: z.array(z.object({
+    risk: z.string().trim(),
+    impact: z.string().trim(),
+    mitigation: z.string().trim(),
+  })).default([]).optional(),
+  roadmap: z.array(z.object({
+    milestone: z.string().trim(),
+    date: z.string().trim(),
+  })).default([]).optional(),
+  technicalGlossary: z.array(z.object({
+    term: z.string().trim(),
+    definition: z.string().trim(),
+  })).default([]).optional(),
+  toolsMentioned: z.array(z.object({
+    tool: z.string().trim(),
+    context: z.string().trim(),
+  })).default([]).optional(),
+  openQuestions: stringArraySchema.optional(),
+  consensusAnalysis: z.object({
+    level: z.string().trim().default('N/A'),
+    disagreements: stringArraySchema,
+  }).optional(),
+  meetingEfficiencyAnalysis: z.object({
+    focusScore: z.coerce.number().int().min(0).max(100).default(75),
+    timeWasted: z.string().trim().default('0%'),
+    focusDetails: z.string().trim().default(''),
+  }).optional(),
+  quotesAndHighlights: z.array(z.object({
+    quote: z.string().trim(),
+    author: z.string().trim(),
+  })).default([]).optional(),
+  overallSentiment: z.string().trim().optional(),
+  conversationalMetrics: z.object({
+    silenceTime: z.string().trim().default('0%'),
+    speed: z.string().trim().default('Normal'),
+    pausesCount: z.coerce.number().int().nonnegative().default(0),
+  }).optional(),
+  priorityMatrix: z.object({
+    urgentImportant: stringArraySchema,
+    urgentNotImportant: stringArraySchema,
+    notUrgentImportant: stringArraySchema,
+    notUrgentNotImportant: stringArraySchema,
+  }).optional(),
+  nextAgenda: stringArraySchema.optional(),
+  individualDevelopment: z.array(z.object({
+    name: z.string().trim(),
+    suggestion: z.string().trim(),
+  })).default([]).optional(),
+  energyAndHumor: z.object({
+    startingEnergy: z.string().trim().default('N/A'),
+    peakEnergy: z.string().trim().default('N/A'),
+    endingEnergy: z.string().trim().default('N/A'),
+  }).optional(),
 })
 
 export type MeetingSummary = z.infer<typeof meetingSummarySchema>
@@ -68,6 +152,7 @@ export interface MeetingRecord {
   modelName?: string
   audioBlob?: Blob
   filename: string
+  company?: string
 }
 
 export interface MeetingExportInput {

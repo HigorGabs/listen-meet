@@ -128,7 +128,6 @@ describe('Home page studio shell', () => {
       expect(screen.getByText('Estúdio de Gravação')).toBeInTheDocument()
       expect(screen.getByText('Configuração de IA')).toBeInTheDocument()
       expect(screen.getByText('Checklist de Preparação')).toBeInTheDocument()
-      expect(screen.getByText('Área de Upload')).toBeInTheDocument()
       expect(screen.getAllByText(/Google Gemini/i).length).toBeGreaterThan(0)
       expect(screen.getAllByText(/Gemini Flash Latest/i).length).toBeGreaterThan(0)
       expect(screen.getAllByText(/variável do servidor/i).length).toBeGreaterThan(0)
@@ -305,17 +304,14 @@ describe('Home page studio shell', () => {
           duration: 125,
         }),
       } as Response)
-    vi.spyOn(MeetingStorage, 'saveMeeting').mockReturnValue(false)
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined)
+    vi.spyOn(MeetingStorage, 'saveMeeting').mockResolvedValue(false)
 
     render(<Home />)
 
     await screen.findByText('Estúdio de Gravação')
     await userEvent.click(screen.getByRole('button', { name: /simular gravação completa/i }))
 
-    await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('Erro ao salvar reunião. O armazenamento local pode estar cheio.')
-    })
+    await screen.findByText('Erro ao salvar reunião. O armazenamento local pode estar cheio.')
   })
 
   it('ignores stale model-list responses when provider switches race', async () => {
@@ -354,9 +350,10 @@ describe('Home page studio shell', () => {
     await userEvent.click(screen.getByRole('button', { name: /configurações/i }))
     await userEvent.click(screen.getByRole('menuitem', { name: /^API$/i }))
 
-    await userEvent.click(screen.getAllByRole('combobox')[0])
+    const providerCombobox = screen.getByRole('combobox', { name: /provedor/i })
+    await userEvent.click(providerCombobox)
     await userEvent.click(await screen.findByRole('option', { name: /OpenRouter/i }))
-    await userEvent.click(screen.getAllByRole('combobox')[0])
+    await userEvent.click(providerCombobox)
     await userEvent.click(await screen.findByRole('option', { name: /Google Gemini/i }))
 
     currentGeminiModels.resolve({
@@ -364,7 +361,9 @@ describe('Home page studio shell', () => {
       json: async () => modelsResponse,
     } as Response)
 
-    await screen.findByText(/Gemini Flash Latest/i)
+    await waitFor(() => {
+      expect(screen.getAllByText(/Gemini Flash Latest/i).length).toBeGreaterThan(0)
+    })
 
     staleOpenRouterModels.resolve({
       ok: true,

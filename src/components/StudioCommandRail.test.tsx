@@ -9,6 +9,7 @@ describe('StudioCommandRail', () => {
     const onOpenSettings = vi.fn()
     const onThemeChange = vi.fn()
     const onLocaleChange = vi.fn()
+    const onOpenProfile = vi.fn()
 
     render(
       <StudioCommandRail
@@ -20,6 +21,7 @@ describe('StudioCommandRail', () => {
         modelsCount={37}
         onLocaleChange={onLocaleChange}
         onOpenSettings={onOpenSettings}
+        onOpenProfile={onOpenProfile}
         onThemeChange={onThemeChange}
         onTabChange={onTabChange}
         providerName="Google Gemini"
@@ -33,7 +35,7 @@ describe('StudioCommandRail', () => {
     const routeStatus = screen.getByLabelText(/Rota de IA: Conectado/i)
     const settingsButton = screen.getByRole('button', { name: /configurações/i })
     expect(routeStatus).toHaveClass('h-10', 'sm:w-40')
-    expect(settingsButton).toHaveClass('h-10', 'sm:w-40')
+    expect(settingsButton).toHaveClass('h-10', 'sm:w-auto', 'sm:min-w-40')
     expect(screen.queryByText('Rota de IA')).not.toBeInTheDocument()
     expect(screen.getByText('Conectado')).toBeInTheDocument()
     expect(screen.queryByText('Google Gemini')).not.toBeInTheDocument()
@@ -82,6 +84,7 @@ describe('StudioCommandRail', () => {
         modelsCount={37}
         onLocaleChange={vi.fn()}
         onOpenSettings={vi.fn()}
+        onOpenProfile={vi.fn()}
         onThemeChange={vi.fn()}
         onTabChange={vi.fn()}
         providerName="Google Gemini"
@@ -94,7 +97,7 @@ describe('StudioCommandRail', () => {
     expect(screen.getByRole('button', { name: /history/i })).toBeInTheDocument()
     const routeStatus = screen.getByLabelText(/AI Route: Connected/i)
     expect(routeStatus).toHaveClass('h-10', 'sm:w-40')
-    expect(screen.getByRole('button', { name: /settings/i })).toHaveClass('h-10', 'sm:w-40')
+    expect(screen.getByRole('button', { name: /settings/i })).toHaveClass('h-10', 'sm:w-auto', 'sm:min-w-40')
     expect(screen.queryByText('AI Route')).not.toBeInTheDocument()
     expect(screen.getByText('Connected')).toBeInTheDocument()
     expect(screen.queryByLabelText('Theme')).not.toBeInTheDocument()

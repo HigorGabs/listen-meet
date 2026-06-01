@@ -60,12 +60,89 @@ function getOpenRouterReferer(): string {
   return 'http://localhost:3000'
 }
 
-function buildMeetingPrompt(locale: Locale, duration: number): string {
+function buildMeetingPrompt(
+  locale: Locale,
+  duration: number,
+  transcript?: string,
+  predefinedParticipants: string[] = [],
+  customTitle?: string,
+  meetingContext?: string,
+  company?: string,
+  template?: string,
+  userProfile?: { name: string; role?: string } | null,
+  collaborators?: Array<{ name: string; role?: string }>
+): string {
   const durationMinutes = Math.floor(duration / 60)
   const outputLanguage = locale === 'en' ? 'English' : 'português brasileiro'
 
+  const inputSourceDesc = transcript 
+    ? `Use a seguinte transcrição literal do áudio da reunião para extrair a análise:
+---
+${transcript}
+---`
+    : `Analise o seguinte arquivo de áudio de uma reunião e gere um resumo estruturado.`
+
+  const transcriptJsonDesc = transcript
+    ? `Use exatamente a transcrição fornecida acima para preencher este campo`
+    : `Transcrição completa do áudio`
+
+  let predefinedParticipantsInstruction = ''
+  if (predefinedParticipants.length > 0) {
+    predefinedParticipantsInstruction = `
+CONTRATOS DE NOMES DE PARTICIPANTES (CRÍTICO):
+Os participantes confirmados presentes nesta reunião são: ${predefinedParticipants.map(p => `"${p}"`).join(', ')}.
+Associe rigidamente os falantes/oradores identificados na reunião a esta lista de nomes, evitando inventar oradores com nomes genéricos ou grafias incorretas se puder mapeá-los a estes participantes.`
+  }
+
+  let profileAndCollaboratorsInstruction = ''
+  if (userProfile || (collaborators && collaborators.length > 0)) {
+    profileAndCollaboratorsInstruction = `
+INFORMAÇÕES DE INTEGRANTES DO TIME E CARGOS (CRÍTICO PARA MAPEAR FALANTES):
+- Usuário principal (gravando a reunião): "${userProfile?.name || 'Eu'}"` + (userProfile?.role ? ` (Cargo/Role: ${userProfile.role})` : '') + `
+`
+    if (collaborators && collaborators.length > 0) {
+      profileAndCollaboratorsInstruction += `- Colaboradores frequentes neste projeto:
+${collaborators.map(c => `  * "${c.name}"` + (c.role ? ` (Cargo/Role: ${c.role})` : '')).join('\n')}
+`
+    }
+    profileAndCollaboratorsInstruction += `
+Use rigidamente as informações de nomes, cargos e relacionamentos acima para correlacionar e identificar os oradores no áudio/transcrição da reunião e na hora de atribuir responsáveis pelas tarefas no JSON.`
+  }
+
+  let contextInstruction = ''
+  if (company || customTitle || meetingContext || (template && template !== 'default')) {
+    contextInstruction = `
+CONTEXTO E DIRETRIZES DA REUNIÃO (CRÍTICO):
+${company ? `- Empresa/Projeto da Reunião: "${company}"` : ''}
+${customTitle ? `- Título predefinido pelo usuário: "${customTitle}" (Utilize exatamente este título ou incorpore-o no campo "title" do JSON de retorno)` : ''}
+${meetingContext ? `- Contexto fornecido pelo usuário: "${meetingContext}" (Use essa informação para entender termos técnicos, jargões, objetivos de negócio ou discussões específicas)` : ''}`
+
+    if (template === 'daily') {
+      contextInstruction += `
+- Modelo de Reunião Selecionado: Daily Scrum (Status Meeting).
+  DIRETRIZES DO DAILY SCRUM (CRÍTICO):
+  1. Defina obrigatoriamente a chave "tags.meetingType" no JSON como "Daily Scrum".
+  2. Estruture a descrição geral ("overview") e o resumo ("summary") abordando especificamente o progresso individual e coletivo baseado nos 3 pilares da Daily Scrum:
+     - O que cada pessoa realizou/concluiu ontem.
+     - O que cada pessoa planeja trabalhar hoje (próximos passos).
+     - Quais impedimentos ou bloqueios foram reportados.
+  3. Mapeie todos os impedimentos, travas ou bloqueios mencionados em "risksAndBlockers" com a respectiva mitigação ou ação corretiva discutida.
+  4. Garanta a correta identificação dos responsáveis pelas tarefas no array "actionItems" usando o formato literal: "Nome da Tarefa [Responsável: Nome]" e preenchendo a propriedade correspondente "assignee" no array "actionPlan".`
+    } else if (template === 'oneOnOne') {
+      contextInstruction += `
+- Modelo de Reunião Selecionado: 1:1 Feedback (One-on-One).
+  DIRETRIZES DE 1:1 (CRÍTICO):
+  1. Defina obrigatoriamente a chave "tags.meetingType" no JSON como "1:1".
+  2. Estruture a descrição geral ("overview") e o resumo ("summary") em torno do alinhamento entre colaborador e gestor, focando em metas traçadas, desenvolvimento profissional e feedbacks.
+  3. Preencha o campo "individualDevelopment" com o feedback detalhado e sugestões de evolução profissional.`
+    }
+  }
+
   return `
-Analise o seguinte arquivo de áudio de uma reunião e gere um resumo estruturado.
+${inputSourceDesc}
+${predefinedParticipantsInstruction}
+${profileAndCollaboratorsInstruction}
+${contextInstruction}
 
 DURAÇÃO: ${durationMinutes} minutos
 
@@ -76,7 +153,7 @@ Forneça um resumo estruturado no seguinte formato JSON, preservando exatamente 
   "overview": "Resumo geral da reunião em 2-3 parágrafos",
   "summary": "Parágrafo conciso de 2-3 linhas explicando o contexto geral da reunião, principais decisões tomadas e próximos passos definidos",
   "keyPoints": ["Ponto principal 1", "Ponto principal 2", "Ponto principal 3"],
-  "actionItems": ["Ação 1", "Ação 2", "Ação 3"],
+  "actionItems": ["Ação 1 [Responsável: Higor]", "Ação 2 [Responsável: Ana]"],
   "participants": ["Participante 1", "Participante 2"],
   "topics": ["Tópico 1", "Tópico 2", "Tópico 3"],
   "metrics": {
@@ -101,33 +178,103 @@ Forneça um resumo estruturado no seguinte formato JSON, preservando exatamente 
   },
   "participationAnalysis": [
     {"participant": "Participante A", "talkTime": "40%", "contributions": "Ideias técnicas", "role": "Facilitador"},
-    {"participant": "Participante B", "talkTime": "35%", "contributions": "Análise de mercado", "role": "Especialista"},
-    {"participant": "Participante C", "talkTime": "25%", "contributions": "Questões práticas", "role": "Questionador"}
+    {"participant": "Participante B", "talkTime": "35%", "contributions": "Análise de mercado", "role": "Especialista"}
   ],
-  "transcript": "Transcrição completa do áudio"
+  "meetingQualityScore": 85,
+  "topicBreakdown": [
+    {"topic": "Discussão Técnica", "percentage": 60},
+    {"topic": "Alinhamento", "percentage": 40}
+  ],
+  "sentimentTimeline": [
+    {"phase": "Início", "sentiment": "Neutro"},
+    {"phase": "Decisões", "sentiment": "Produtivo"}
+  ],
+  "decisions": ["Decisão importante 1", "Decisão importante 2"],
+  "transcript": "${transcriptJsonDesc}",
+
+  "summaryOneLine": "Resumo em uma única sentença marcante",
+  "agendaAlignment": {
+    "achieved": ["Objetivo propostos que foi alcançado"],
+    "pending": ["Tópico pendente ou adiado para próximo encontro"]
+  },
+  "criticalDecisions": [
+    {"decision": "Decisão tomada", "rationale": "Racional/Justificativa da decisão"}
+  ],
+  "actionPlan": [
+    {"task": "Ação específica", "assignee": "Responsável pela tarefa", "deadline": "Prazo estimado", "priority": "Alta/Média/Baixa"}
+  ],
+  "risksAndBlockers": [
+    {"risk": "Risco/impedimento", "impact": "Alto/Médio/Baixo", "mitigation": "Mitigação"}
+  ],
+  "roadmap": [
+    {"milestone": "Marco/Entregável", "date": "Data prevista"}
+  ],
+  "technicalGlossary": [
+    {"term": "Termo técnico/Sigla", "definition": "Explicação detalhada"}
+  ],
+  "toolsMentioned": [
+    {"tool": "Ferramenta/Sistema citada", "context": "Contexto em que foi mencionada"}
+  ],
+  "openQuestions": ["Pergunta levantada sem resposta definida"],
+  "consensusAnalysis": {
+    "level": "Alto/Médio/Baixo",
+    "disagreements": ["Ponto de divergência ou debate acalorado"]
+  },
+  "meetingEfficiencyAnalysis": {
+    "focusScore": 85,
+    "timeWasted": "15%",
+    "focusDetails": "Detalhamento da produtividade do tempo"
+  },
+  "quotesAndHighlights": [
+    {"quote": "Citação literal importante dita", "author": "Autor da fala"}
+  ],
+  "overallSentiment": "Análise detalhada do tom e clima predominante",
+  "conversationalMetrics": {
+    "silenceTime": "5%",
+    "speed": "Moderada",
+    "pausesCount": 4
+  },
+  "priorityMatrix": {
+    "urgentImportant": ["Ação A"],
+    "urgentNotImportant": ["Ação B"],
+    "notUrgentImportant": ["Ação C"],
+    "notUrgentNotImportant": ["Ação D"]
+  },
+  "nextAgenda": ["Pauta recomendada para próximo encontro"],
+  "individualDevelopment": [
+    {"name": "Nome do participante", "suggestion": "Sugestão/feedback construtivo de atuação"}
+  ],
+  "energyAndHumor": {
+    "startingEnergy": "Alta/Baixa/Média",
+    "peakEnergy": "Alta/Baixa/Média",
+    "endingEnergy": "Alta/Baixa/Média"
+  }
 }
 
 INSTRUÇÕES:
-- Transcreva o áudio completo para texto
-- Identifique os pontos mais importantes da discussão
-- Extraia todas as ações específicas mencionadas
-- Liste os participantes identificáveis na conversa
-- Categorize os principais tópicos abordados
-- Analise a eficiência da reunião (% de tempo produtivo vs tangencial)
-- Avalie o nível de engajamento dos participantes
-- Conte quantas decisões concretas foram tomadas
-- Crie uma timeline simples das fases da reunião
-- Categorize o tipo de reunião (Planejamento, Review, Brainstorm, Status)
-- Defina prioridade (Alta, Média, Baixa) baseada na urgência dos tópicos
-- Analise o sentimento geral (Produtiva, Construtiva, Tensa)
-- Avalie se houve decisões claras ou se precisa follow-up
-- Distribua tempo de fala por participante (aproximado)
-- Identifique principais contribuições de cada um
-- Escreva todos os valores textuais em ${outputLanguage}
-- Seja conciso mas abrangente
-- Se não conseguir identificar participantes específicos, use "Participante A", "Participante B", etc.
-
-Responda APENAS com o JSON válido, sem texto adicional.
+- Responda APENAS com o JSON válido, sem texto adicional.
+- Escreva todos os valores textuais em ${outputLanguage}.
+- Seja extremamente conciso mas abrangente e detalhado no preenchimento de todas as chaves (peque pelo excesso de dados).
+- Identifique os pontos mais importantes da discussão.
+- Extraia todas as ações específicas e preencha os campos "actionItems" e "actionPlan" de forma correspondente.
+- No campo "summaryOneLine", resuma todo o teor do encontro em uma única linha clara e marcante.
+- No campo "agendaAlignment", separe os objetivos propostos que foram atingidos ("achieved") dos que ficaram em aberto ou pendentes ("pending").
+- No campo "criticalDecisions", mapeie as principais decisões e o racional (motivação técnica/de negócios) por trás delas.
+- No campo "actionPlan", monte um plano de ação completo. Mapeie todas as tarefas aos participantes conhecidos.
+- No campo "risksAndBlockers", identifique riscos de prazos, técnicos, ou de negócio mencionados e suas devidas mitigações discutidas.
+- No campo "roadmap", trace a linha do tempo futura e marcos com datas para cada decisão tomada.
+- No campo "technicalGlossary", explique qualquer termo técnico, sigla corporativa ou jargão falado na reunião.
+- No campo "toolsMentioned", liste todos os sistemas, softwares ou links citados (ex: Jira, Notion, GitHub, servidores, bancos de dados, planilhas) e como eles se aplicam.
+- No campo "openQuestions", extraia as perguntas que ficaram sem resposta definitiva ou que necessitam de alinhamento futuro.
+- No campo "consensusAnalysis", meça o nível de concordância geral da sala e aponte os focos de debate ou discordância saudável.
+- No campo "meetingEfficiencyAnalysis", calcule um score de foco da pauta e aponte desvios de tempo (tangentes, brincadeiras, etc.).
+- No campo "quotesAndHighlights", extraia citações marcantes ditas textualmente por participantes.
+- No campo "overallSentiment", descreva as nuances emocionais (ex: empolgado, focado, cansado, tenso) do grupo.
+- No campo "conversationalMetrics", estime os tempos de silêncio e pausas, avaliando o ritmo do diálogo.
+- No campo "priorityMatrix", classifique as ações extraídas na clássica Matriz de Eisenhower (Urgente/Importante, etc.).
+- No campo "nextAgenda", sugira a pauta exata e focada para o próximo encontro com base no que ficou pendente ou de follow-up.
+- No campo "individualDevelopment", ofereça uma sugestão construtiva e acionável de feedback ou desenvolvimento para cada participante principal com base em sua postura ou desafios apresentados.
+- No campo "energyAndHumor", descreva a variação da energia do grupo ao longo da reunião (início, pico e final).
 `
 }
 
@@ -218,10 +365,23 @@ async function generateWithGeminiFallback(
 async function generateWithOpenRouter(
   apiKey: string,
   model: string,
-  audio: { data: string; format: string },
+  audio: { data: string; format: string } | null,
   prompt: string
 ): Promise<string> {
   if (!model) throw new Error('Selecione um modelo do OpenRouter.')
+
+  const contentValue = audio 
+    ? [
+        { type: 'text', text: prompt },
+        {
+          type: 'input_audio',
+          inputAudio: {
+            data: audio.data,
+            format: audio.format,
+          },
+        },
+      ]
+    : prompt
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -236,16 +396,7 @@ async function generateWithOpenRouter(
       messages: [
         {
           role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'input_audio',
-              inputAudio: {
-                data: audio.data,
-                format: audio.format,
-              },
-            },
-          ],
+          content: contentValue,
         },
       ],
       stream: false,
@@ -281,7 +432,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (contentLength > MAX_AUDIO_UPLOAD_BYTES + 512 * 1024) {
+    const maxAbsoluteLimitBytes = 30 * 1024 * 1024 // 30MB absolute ceiling
+    if (contentLength > maxAbsoluteLimitBytes) {
       return NextResponse.json(
         { error: 'Arquivo muito grande para processamento direto.' },
         { status: 413 }
@@ -304,6 +456,38 @@ export async function POST(request: NextRequest) {
     const apiKey = getApiKey(provider, formData.get('apiKey'))
     const duration = parseDuration(formData.get('duration'))
     const locale = normalizeLocale(getStringValue(formData.get('locale')))
+    const processingMode = getStringValue(formData.get('processingMode')) || 'multimodal'
+    const predefinedParticipantsString = getStringValue(formData.get('participants'))
+    let predefinedParticipants: string[] = []
+    if (predefinedParticipantsString) {
+      try {
+        predefinedParticipants = JSON.parse(predefinedParticipantsString)
+      } catch (err) {
+        console.error('Failed to parse predefined participants:', err)
+      }
+    }
+    const customTitle = getStringValue(formData.get('customTitle'))
+    const meetingContext = getStringValue(formData.get('meetingContext'))
+    const company = getStringValue(formData.get('company'))
+    const template = getStringValue(formData.get('template')) || 'default'
+    const userProfileString = getStringValue(formData.get('userProfile'))
+    let userProfile: { name: string; role?: string } | null = null
+    if (userProfileString) {
+      try {
+        userProfile = JSON.parse(userProfileString)
+      } catch (err) {
+        console.error('Failed to parse user profile:', err)
+      }
+    }
+    const collaboratorsString = getStringValue(formData.get('collaborators'))
+    let collaborators: Array<{ name: string; role?: string }> = []
+    if (collaboratorsString) {
+      try {
+        collaborators = JSON.parse(collaboratorsString)
+      } catch (err) {
+        console.error('Failed to parse collaborators:', err)
+      }
+    }
 
     if (!apiKey) {
       return NextResponse.json(
@@ -324,11 +508,12 @@ export async function POST(request: NextRequest) {
     }
 
     const audioFile = audioValue
+    const providerConfig = getProvider(provider)
     const validation = validateAudioFile({
       name: audioFile.name,
       type: audioFile.type,
       size: audioFile.size,
-    })
+    }, providerConfig.maxUploadMb)
 
     if (!validation.valid) {
       return NextResponse.json(
@@ -352,28 +537,92 @@ export async function POST(request: NextRequest) {
     }
 
     const audioBase64 = Buffer.from(audioBuffer).toString('base64')
+    let text = ''
 
-    const prompt = buildMeetingPrompt(locale, duration)
+    if (processingMode === 'text') {
+      // 1. literal transcription pass
+      const transPrompt = "Transcreva o áudio literal completo. Responda apenas com a transcrição pura e literal do áudio da reunião, sem introduções, resumos, explicações ou formatação JSON."
+      const rawTranscript = provider === 'gemini'
+        ? await generateWithGeminiFallback(
+            new GoogleGenerativeAI(apiKey),
+            {
+              mimeType: getAudioMimeType(audioFile.name, audioFile.type),
+              data: audioBase64
+            },
+            transPrompt,
+            model
+          )
+        : await generateWithOpenRouter(
+            apiKey,
+            model,
+            {
+              data: audioBase64,
+              format: getAudioFormat(audioFile.name, audioFile.type),
+            },
+            transPrompt
+          )
 
-    const text = provider === 'gemini'
-      ? await generateWithGeminiFallback(
-          new GoogleGenerativeAI(apiKey),
-          {
-            mimeType: getAudioMimeType(audioFile.name, audioFile.type),
-            data: audioBase64
-          },
-          prompt,
-          model
-        )
-      : await generateWithOpenRouter(
+      // 2. text-only structured analysis pass
+      const finalPrompt = buildMeetingPrompt(
+        locale,
+        duration,
+        rawTranscript,
+        predefinedParticipants,
+        customTitle,
+        meetingContext,
+        company,
+        template,
+        userProfile,
+        collaborators
+      )
+      if (provider === 'gemini') {
+        const genAI = new GoogleGenerativeAI(apiKey)
+        const activeModelName = model || getGeminiFallbackModels(model)[0]
+        const generativeModel = genAI.getGenerativeModel({ model: activeModelName })
+        const result = await generativeModel.generateContent(finalPrompt)
+        text = result.response.text()
+      } else {
+        text = await generateWithOpenRouter(
           apiKey,
           model,
-          {
-            data: audioBase64,
-            format: getAudioFormat(audioFile.name, audioFile.type),
-          },
-          prompt
+          null, // pass null audio for text-only call!
+          finalPrompt
         )
+      }
+    } else {
+      // Multimodal mode: Full audio direct pass
+      const prompt = buildMeetingPrompt(
+        locale,
+        duration,
+        undefined,
+        predefinedParticipants,
+        customTitle,
+        meetingContext,
+        company,
+        template,
+        userProfile,
+        collaborators
+      )
+      text = provider === 'gemini'
+        ? await generateWithGeminiFallback(
+            new GoogleGenerativeAI(apiKey),
+            {
+              mimeType: getAudioMimeType(audioFile.name, audioFile.type),
+              data: audioBase64
+            },
+            prompt,
+            model
+          )
+        : await generateWithOpenRouter(
+            apiKey,
+            model,
+            {
+              data: audioBase64,
+              format: getAudioFormat(audioFile.name, audioFile.type),
+            },
+            prompt
+          )
+    }
 
     const summary = parseMeetingSummary(text)
 
